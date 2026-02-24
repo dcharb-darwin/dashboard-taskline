@@ -76,6 +76,37 @@ const toTemplateInsert = (input: z.infer<typeof templateInputSchema>) => {
   };
 };
 
+const applyTaskWorkflowGuardrails = (
+  current: { status: string; completionPercent: number },
+  patch: {
+    status?: "Not Started" | "In Progress" | "Complete" | "On Hold";
+    completionPercent?: number;
+  }
+) => {
+  if (current.status === "Complete" && patch.status && patch.status !== "Complete") {
+    throw new Error("Completed tasks cannot move back to non-complete status.");
+  }
+
+  const normalized = { ...patch };
+
+  if (normalized.status === "Complete") {
+    normalized.completionPercent = 100;
+  } else if (normalized.completionPercent === 100) {
+    normalized.status = "Complete";
+  }
+
+  if (
+    normalized.status &&
+    normalized.status !== "Complete" &&
+    normalized.completionPercent !== undefined &&
+    normalized.completionPercent >= 100
+  ) {
+    normalized.completionPercent = 99;
+  }
+
+  return normalized;
+};
+
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -245,6 +276,7 @@ export const appRouter = router({
           startDate: z.date().optional(),
           targetCompletionDate: z.date().optional(),
           budget: z.number().optional(),
+          actualBudget: z.number().optional(),
           status: z.enum(["Planning", "Active", "On Hold", "Complete"]).optional(),
         })
       )
@@ -331,6 +363,7 @@ export const appRouter = router({
           startDate: z.date().optional(),
           targetCompletionDate: z.date().optional(),
           budget: z.number().optional(),
+          actualBudget: z.number().optional(),
           status: z.enum(["Planning", "Active", "On Hold", "Complete"]).optional(),
         })
       )
@@ -376,6 +409,7 @@ export const appRouter = router({
           priority: z.enum(["High", "Medium", "Low"]).optional(),
           phase: z.string().optional(),
           budget: z.number().optional(),
+          actualBudget: z.number().optional(),
           approvalRequired: z.enum(["Yes", "No"]).optional(),
           approver: z.string().optional(),
           deliverableType: z.string().optional(),
@@ -385,7 +419,12 @@ export const appRouter = router({
       )
       .mutation(async ({ input }) => {
         const { createTask, getTaskById } = await import("./db");
-        const id = await createTask(input);
+        const normalizedInput = {
+          ...input,
+          ...(input.status === "Complete" ? { completionPercent: 100 } : {}),
+          ...(input.completionPercent === 100 ? { status: "Complete" as const } : {}),
+        };
+        const id = await createTask(normalizedInput);
         const task = await getTaskById(id);
         if (!task) throw new Error("Failed to retrieve created task");
         return task;
@@ -404,6 +443,7 @@ export const appRouter = router({
           priority: z.enum(["High", "Medium", "Low"]).optional(),
           phase: z.string().optional(),
           budget: z.number().optional(),
+          actualBudget: z.number().optional(),
           approvalRequired: z.enum(["Yes", "No"]).optional(),
           approver: z.string().optional(),
           deliverableType: z.string().optional(),
@@ -413,9 +453,82 @@ export const appRouter = router({
       )
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
-        const { updateTask } = await import("./db");
-        await updateTask(id, data);
+        const { getTaskById, updateTask } = await import("./db");
+        const current = await getTaskById(id);
+        if (!current) throw new Error("Task not found");
+
+        const normalized = applyTaskWorkflowGuardrails(current, {
+          status: data.status,
+          completionPercent: data.completionPercent,
+        });
+
+        await updateTask(id, {
+          ...data,
+          status: normalized.status ?? data.status,
+          completionPercent:
+            normalized.completionPercent ?? data.completionPercent,
+        });
         return { success: true };
+      }),
+    bulkUpdate: publicProcedure
+      .input(
+        z.object({
+          projectId: z.number(),
+          taskIds: z.array(z.number()).min(1),
+          patch: z
+            .object({
+              owner: z.string().optional(),
+              status: z.enum(["Not Started", "In Progress", "Complete", "On Hold"]).optional(),
+              priority: z.enum(["High", "Medium", "Low"]).optional(),
+              startDate: z.date().optional(),
+              dueDate: z.date().optional(),
+              completionPercent: z.number().min(0).max(100).optional(),
+              actualBudget: z.number().optional(),
+            })
+            .refine((value) => Object.keys(value).length > 0, {
+              message: "Patch must include at least one field.",
+            }),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { bulkUpdateTasks, getTasksByIds, validateTaskDependencies } = await import("./db");
+        const tasks = await getTasksByIds(input.taskIds);
+        if (tasks.length !== input.taskIds.length) {
+          throw new Error("One or more tasks were not found.");
+        }
+
+        for (const task of tasks) {
+          if (task.projectId !== input.projectId) {
+            throw new Error("All selected tasks must belong to the same project.");
+          }
+        }
+
+        for (const task of tasks) {
+          const normalized = applyTaskWorkflowGuardrails(task, {
+            status: input.patch.status,
+            completionPercent: input.patch.completionPercent,
+          });
+          await bulkUpdateTasks([task.id], {
+            ...input.patch,
+            status: normalized.status ?? input.patch.status,
+            completionPercent:
+              normalized.completionPercent ?? input.patch.completionPercent,
+          });
+        }
+
+        const dependencyWarnings = await validateTaskDependencies(input.projectId);
+
+        return {
+          success: true,
+          updatedCount: tasks.length,
+          dependencyWarnings,
+        };
+      }),
+    validateDependencies: publicProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ input }) => {
+        const { validateTaskDependencies } = await import("./db");
+        return validateTaskDependencies(input.projectId);
       }),
     delete: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
       const { deleteTask } = await import("./db");

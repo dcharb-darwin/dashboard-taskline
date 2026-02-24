@@ -22,6 +22,13 @@ type TemplateQueryOptions = {
   templateGroupKey?: string;
 };
 
+export type DependencyValidationIssue = {
+  type: "missing_dependency" | "date_conflict" | "cycle";
+  taskId: string;
+  dependencyTaskId?: string;
+  message: string;
+};
+
 type TemplateTaskSeed = {
   taskId: string;
   taskDescription: string;
@@ -288,6 +295,7 @@ const buildMemoryState = (): MemoryState => {
       startDate: new Date("2025-05-01T00:00:00.000Z"),
       targetCompletionDate: new Date("2025-09-30T00:00:00.000Z"),
       budget: 1250000,
+      actualBudget: 640000,
       status: "Active",
       createdAt: new Date("2025-04-15T00:00:00.000Z"),
       updatedAt: new Date("2025-04-15T00:00:00.000Z"),
@@ -302,6 +310,7 @@ const buildMemoryState = (): MemoryState => {
       startDate: new Date("2025-06-01T00:00:00.000Z"),
       targetCompletionDate: new Date("2025-07-16T00:00:00.000Z"),
       budget: 250000,
+      actualBudget: 90000,
       status: "Planning",
       createdAt: new Date("2025-05-10T00:00:00.000Z"),
       updatedAt: new Date("2025-05-10T00:00:00.000Z"),
@@ -323,6 +332,7 @@ const buildMemoryState = (): MemoryState => {
       priority: "High",
       phase: "Planning",
       budget: 50000,
+      actualBudget: 52000,
       approvalRequired: "No",
       approver: null,
       deliverableType: "Campaign Brief",
@@ -345,6 +355,7 @@ const buildMemoryState = (): MemoryState => {
       priority: "Medium",
       phase: "Creative",
       budget: 75000,
+      actualBudget: 26000,
       approvalRequired: "No",
       approver: null,
       deliverableType: "Messaging Deck",
@@ -367,6 +378,7 @@ const buildMemoryState = (): MemoryState => {
       priority: "High",
       phase: "Planning",
       budget: 25000,
+      actualBudget: 0,
       approvalRequired: "No",
       approver: null,
       deliverableType: "Event Plan",
@@ -391,6 +403,96 @@ let memoryState = buildMemoryState();
 const getNextTaskCode = (projectId: number) => {
   const existingTasks = memoryState.tasks.filter((task) => task.projectId === projectId);
   return `T${String(existingTasks.length + 1).padStart(3, "0")}`;
+};
+
+const parseDependencies = (dependency: string | null) =>
+  dependency
+    ? dependency
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
+    : [];
+
+const uniqueIssues = (issues: DependencyValidationIssue[]) => {
+  const seen = new Set<string>();
+  return issues.filter((issue) => {
+    const key = `${issue.type}:${issue.taskId}:${issue.dependencyTaskId ?? ""}:${issue.message}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const detectCycles = (taskMap: Map<string, Task>) => {
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+  const cycleIssues: DependencyValidationIssue[] = [];
+
+  const dfs = (taskId: string, path: string[]) => {
+    if (visiting.has(taskId)) {
+      cycleIssues.push({
+        type: "cycle",
+        taskId,
+        message: `Dependency cycle detected: ${[...path, taskId].join(" -> ")}`,
+      });
+      return;
+    }
+    if (visited.has(taskId)) return;
+
+    visiting.add(taskId);
+    const task = taskMap.get(taskId);
+    const dependencies = parseDependencies(task?.dependency ?? null);
+    for (const dependencyTaskId of dependencies) {
+      if (!taskMap.has(dependencyTaskId)) continue;
+      dfs(dependencyTaskId, [...path, taskId]);
+    }
+    visiting.delete(taskId);
+    visited.add(taskId);
+  };
+
+  for (const taskId of Array.from(taskMap.keys())) {
+    if (!visited.has(taskId)) {
+      dfs(taskId, []);
+    }
+  }
+
+  return cycleIssues;
+};
+
+const buildDependencyIssues = (tasks: Task[]): DependencyValidationIssue[] => {
+  const taskMap = new Map(tasks.map((task) => [task.taskId, task]));
+  const issues: DependencyValidationIssue[] = [];
+
+  for (const task of tasks) {
+    const dependencies = parseDependencies(task.dependency);
+    for (const dependencyTaskId of dependencies) {
+      const dependencyTask = taskMap.get(dependencyTaskId);
+      if (!dependencyTask) {
+        issues.push({
+          type: "missing_dependency",
+          taskId: task.taskId,
+          dependencyTaskId,
+          message: `Task ${task.taskId} references missing dependency ${dependencyTaskId}.`,
+        });
+        continue;
+      }
+
+      if (
+        dependencyTask.dueDate &&
+        task.startDate &&
+        dependencyTask.dueDate.getTime() > task.startDate.getTime()
+      ) {
+        issues.push({
+          type: "date_conflict",
+          taskId: task.taskId,
+          dependencyTaskId,
+          message: `Task ${task.taskId} starts before dependency ${dependencyTaskId} is due.`,
+        });
+      }
+    }
+  }
+
+  return uniqueIssues([...issues, ...detectCycles(taskMap)]);
 };
 
 const computeDashboardStats = (allProjects: Project[], allTasks: Task[]) => {
@@ -759,6 +861,7 @@ export async function createProject(data: InsertProject) {
       startDate: data.startDate ?? null,
       targetCompletionDate: data.targetCompletionDate ?? null,
       budget: data.budget ?? null,
+      actualBudget: data.actualBudget ?? null,
       status: data.status ?? "Planning",
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -789,6 +892,7 @@ export async function updateProject(id: number, data: Partial<InsertProject>) {
       targetCompletionDate:
         data.targetCompletionDate ?? memoryState.projects[index]!.targetCompletionDate,
       budget: data.budget ?? memoryState.projects[index]!.budget,
+      actualBudget: data.actualBudget ?? memoryState.projects[index]!.actualBudget,
     };
     return;
   }
@@ -838,6 +942,18 @@ export async function getTaskById(id: number) {
   return result[0];
 }
 
+export async function getTasksByIds(taskIds: number[]) {
+  if (taskIds.length === 0) return [];
+  const allTasks = await getAllTasks();
+  const taskIdSet = new Set(taskIds);
+  return allTasks.filter((task) => taskIdSet.has(task.id));
+}
+
+export async function validateTaskDependencies(projectId: number) {
+  const tasks = await getTasksByProjectId(projectId);
+  return buildDependencyIssues(tasks);
+}
+
 export async function createTask(data: InsertTask) {
   const db = await getDb();
   if (!db) {
@@ -855,6 +971,7 @@ export async function createTask(data: InsertTask) {
       priority: data.priority ?? "Medium",
       phase: data.phase ?? null,
       budget: data.budget ?? null,
+      actualBudget: data.actualBudget ?? null,
       approvalRequired: data.approvalRequired ?? "No",
       approver: data.approver ?? null,
       deliverableType: data.deliverableType ?? null,
@@ -902,6 +1019,7 @@ export async function updateTask(id: number, data: Partial<InsertTask>) {
       owner: data.owner ?? memoryState.tasks[index]!.owner,
       phase: data.phase ?? memoryState.tasks[index]!.phase,
       budget: data.budget ?? memoryState.tasks[index]!.budget,
+      actualBudget: data.actualBudget ?? memoryState.tasks[index]!.actualBudget,
       approver: data.approver ?? memoryState.tasks[index]!.approver,
       deliverableType: data.deliverableType ?? memoryState.tasks[index]!.deliverableType,
       notes: data.notes ?? memoryState.tasks[index]!.notes,
@@ -912,6 +1030,15 @@ export async function updateTask(id: number, data: Partial<InsertTask>) {
 
   const { tasks } = await import("../drizzle/schema");
   await db.update(tasks).set(data).where(eq(tasks.id, id));
+}
+
+export async function bulkUpdateTasks(taskIds: number[], data: Partial<InsertTask>) {
+  if (taskIds.length === 0) return 0;
+
+  for (const taskId of taskIds) {
+    await updateTask(taskId, data);
+  }
+  return taskIds.length;
 }
 
 export async function deleteTask(id: number) {

@@ -23,6 +23,7 @@ interface Task {
   priority: "High" | "Medium" | "Low";
   phase: string | null;
   budget: number | null;
+  actualBudget: number | null;
   approvalRequired: "Yes" | "No";
   approver: string | null;
   deliverableType: string | null;
@@ -49,6 +50,7 @@ export function EditTaskDialog({ task, open, onOpenChange, onSuccess }: EditTask
     priority: task.priority,
     phase: task.phase || "",
     budget: task.budget ? (task.budget / 100).toString() : "",
+    actualBudget: task.actualBudget ? (task.actualBudget / 100).toString() : "",
     approvalRequired: task.approvalRequired,
     approver: task.approver || "",
     deliverableType: task.deliverableType || "",
@@ -82,6 +84,9 @@ export function EditTaskDialog({ task, open, onOpenChange, onSuccess }: EditTask
       priority: formData.priority,
       phase: formData.phase || undefined,
       budget: formData.budget ? Math.round(parseFloat(formData.budget) * 100) : undefined,
+      actualBudget: formData.actualBudget
+        ? Math.round(parseFloat(formData.actualBudget) * 100)
+        : undefined,
       approvalRequired: formData.approvalRequired,
       approver: formData.approver || undefined,
       deliverableType: formData.deliverableType || undefined,
@@ -227,7 +232,7 @@ export function EditTaskDialog({ task, open, onOpenChange, onSuccess }: EditTask
             </div>
 
             {/* Budget and Deliverable */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="budget">Budget ($)</Label>
                 <Input
@@ -236,6 +241,19 @@ export function EditTaskDialog({ task, open, onOpenChange, onSuccess }: EditTask
                   step="0.01"
                   value={formData.budget}
                   onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="actualBudget">Actual ($)</Label>
+                <Input
+                  id="actualBudget"
+                  type="number"
+                  step="0.01"
+                  value={formData.actualBudget}
+                  onChange={(e) =>
+                    setFormData({ ...formData, actualBudget: e.target.value })
+                  }
                   placeholder="0.00"
                 />
               </div>

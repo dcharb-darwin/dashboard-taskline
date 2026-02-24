@@ -1,18 +1,27 @@
 import { trpc } from "@/lib/trpc";
 import { formatTemplateLabel } from "@/lib/template";
+import {
+  getSharedView,
+  type ProjectStatusFilter,
+  updateSharedView,
+} from "@/lib/sharedView";
 import { Button } from "@/components/ui/button";
 import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Link } from "wouter";
 import { FolderKanban, Plus, Search } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 
 export default function Projects() {
   const { data: projects, isLoading } = trpc.projects.list.useQuery();
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>(() => getSharedView().projectStatus);
+
+  useEffect(() => {
+    updateSharedView({ projectStatus: statusFilter as ProjectStatusFilter });
+  }, [statusFilter]);
 
   const filteredProjects = projects?.filter((project) => {
     const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

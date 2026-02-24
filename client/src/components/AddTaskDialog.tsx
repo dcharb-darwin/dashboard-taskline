@@ -28,6 +28,7 @@ export function AddTaskDialog({ projectId, open, onOpenChange, onSuccess }: AddT
     priority: "Medium" as const,
     phase: "",
     budget: "",
+    actualBudget: "",
     approvalRequired: "No" as const,
     approver: "",
     deliverableType: "",
@@ -51,6 +52,7 @@ export function AddTaskDialog({ projectId, open, onOpenChange, onSuccess }: AddT
         priority: "Medium",
         phase: "",
         budget: "",
+        actualBudget: "",
         approvalRequired: "No",
         approver: "",
         deliverableType: "",
@@ -77,6 +79,9 @@ export function AddTaskDialog({ projectId, open, onOpenChange, onSuccess }: AddT
       priority: formData.priority,
       phase: formData.phase || undefined,
       budget: formData.budget ? Math.round(parseFloat(formData.budget) * 100) : undefined,
+      actualBudget: formData.actualBudget
+        ? Math.round(parseFloat(formData.actualBudget) * 100)
+        : undefined,
       approvalRequired: formData.approvalRequired,
       approver: formData.approver || undefined,
       deliverableType: formData.deliverableType || undefined,
@@ -197,7 +202,7 @@ export function AddTaskDialog({ projectId, open, onOpenChange, onSuccess }: AddT
             </div>
 
             {/* Dependency and Budget */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="dependency">Dependency</Label>
                 <Input
@@ -216,6 +221,19 @@ export function AddTaskDialog({ projectId, open, onOpenChange, onSuccess }: AddT
                   step="0.01"
                   value={formData.budget}
                   onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="actualBudget">Actual ($)</Label>
+                <Input
+                  id="actualBudget"
+                  type="number"
+                  step="0.01"
+                  value={formData.actualBudget}
+                  onChange={(e) =>
+                    setFormData({ ...formData, actualBudget: e.target.value })
+                  }
                   placeholder="0.00"
                 />
               </div>

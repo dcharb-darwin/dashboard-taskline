@@ -49,6 +49,7 @@ export default function CreateProject() {
     startDate: "",
     targetCompletionDate: "",
     budget: "",
+    actualBudget: "",
     status: "Planning" as const,
   });
 
@@ -87,6 +88,9 @@ export default function CreateProject() {
       startDate: formData.startDate ? new Date(formData.startDate) : undefined,
       targetCompletionDate: formData.targetCompletionDate ? new Date(formData.targetCompletionDate) : undefined,
       budget: formData.budget ? Math.round(parseFloat(formData.budget) * 100) : undefined,
+      actualBudget: formData.actualBudget
+        ? Math.round(parseFloat(formData.actualBudget) * 100)
+        : undefined,
       status: formData.status,
     });
   };
@@ -293,16 +297,31 @@ export default function CreateProject() {
                     </div>
 
                     {/* Budget */}
-                    <div className="space-y-2">
-                      <Label htmlFor="budget">Budget ($)</Label>
-                      <Input
-                        id="budget"
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={formData.budget}
-                        onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
-                      />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="budget">Planned Budget ($)</Label>
+                        <Input
+                          id="budget"
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={formData.budget}
+                          onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="actualBudget">Actual Spend ($)</Label>
+                        <Input
+                          id="actualBudget"
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={formData.actualBudget}
+                          onChange={(e) =>
+                            setFormData({ ...formData, actualBudget: e.target.value })
+                          }
+                        />
+                      </div>
                     </div>
 
                     {/* Status */}

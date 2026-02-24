@@ -1,19 +1,37 @@
 import { useState } from "react";
 import { Gantt, Task, ViewMode } from "gantt-task-react";
 import { trpc } from "@/lib/trpc";
+import {
+  getSharedView,
+  type ProjectStatusFilter,
+  updateSharedView,
+} from "@/lib/sharedView";
 import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useEffect } from "react";
 import "gantt-task-react/dist/index.css";
 
 export default function GanttChart() {
   const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.Month);
-  const [selectedProject, setSelectedProject] = useState<string>("all");
+  const [selectedProject, setSelectedProject] = useState<string>(
+    () => getSharedView().selectedProject
+  );
+  const [statusFilter, setStatusFilter] = useState<ProjectStatusFilter>(
+    () => getSharedView().projectStatus
+  );
   
   const { data: projects, isLoading: projectsLoading } = trpc.projects.list.useQuery();
   const { data: allTasks, isLoading: tasksLoading } = trpc.tasks.listAll.useQuery();
+
+  useEffect(() => {
+    updateSharedView({
+      selectedProject,
+      projectStatus: statusFilter,
+    });
+  }, [selectedProject, statusFilter]);
 
   if (projectsLoading || tasksLoading) {
     return (
@@ -25,10 +43,24 @@ export default function GanttChart() {
 
   // Transform projects and tasks into Gantt chart format
   const tasks: Task[] = [];
+  const filteredProjects =
+    statusFilter === "all"
+      ? projects
+      : projects?.filter((project) => project.status === statusFilter);
+
+  useEffect(() => {
+    if (selectedProject === "all") return;
+    const exists = filteredProjects?.some(
+      (project) => project.id === Number.parseInt(selectedProject, 10)
+    );
+    if (!exists) {
+      setSelectedProject("all");
+    }
+  }, [filteredProjects, selectedProject]);
 
   if (selectedProject === "all") {
     // Show all projects as top-level tasks
-    projects?.forEach((project) => {
+    filteredProjects?.forEach((project) => {
       const projectTasks = allTasks?.filter((t) => t.projectId === project.id) || [];
       
       // Calculate project dates from tasks or use project dates
@@ -76,7 +108,7 @@ export default function GanttChart() {
     });
   } else {
     // Show single project with all its tasks
-    const project = projects?.find((p) => p.id === parseInt(selectedProject));
+    const project = filteredProjects?.find((p) => p.id === parseInt(selectedProject));
     if (project) {
       const projectTasks = allTasks?.filter((t) => t.projectId === project.id) || [];
       
@@ -112,9 +144,31 @@ export default function GanttChart() {
 
   return (
     <AppLayout>
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">Gantt Chart</h1>
-        <p className="text-muted-foreground">Visualize project timelines and task dependencies</p>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold">Gantt Chart</h1>
+          <p className="text-muted-foreground">Visualize project timelines and task dependencies</p>
+        </div>
+        <div className="w-[220px]">
+          <Select
+            value={statusFilter}
+            onValueChange={(value) => {
+              setStatusFilter(value as ProjectStatusFilter);
+              setSelectedProject("all");
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="Planning">Planning</SelectItem>
+              <SelectItem value="Active">Active</SelectItem>
+              <SelectItem value="On Hold">On Hold</SelectItem>
+              <SelectItem value="Complete">Complete</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Card className="bg-white">
@@ -131,7 +185,7 @@ export default function GanttChart() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Projects</SelectItem>
-                  {projects?.map((project) => (
+                  {filteredProjects?.map((project) => (
                     <SelectItem key={project.id} value={project.id.toString()}>
                       {project.name}
                     </SelectItem>

@@ -59,6 +59,7 @@ export const projects = mysqlTable("projects", {
   startDate: timestamp("startDate"),
   targetCompletionDate: timestamp("targetCompletionDate"),
   budget: int("budget"), // stored as cents
+  actualBudget: int("actualBudget"), // stored as cents
   status: mysqlEnum("status", ["Planning", "Active", "On Hold", "Complete"]).default("Planning").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -84,6 +85,7 @@ export const tasks = mysqlTable("tasks", {
   priority: mysqlEnum("priority", ["High", "Medium", "Low"]).default("Medium").notNull(),
   phase: text("phase"),
   budget: int("budget"), // stored as cents
+  actualBudget: int("actualBudget"), // stored as cents
   approvalRequired: mysqlEnum("approvalRequired", ["Yes", "No"]).default("No").notNull(),
   approver: text("approver"),
   deliverableType: text("deliverableType"),

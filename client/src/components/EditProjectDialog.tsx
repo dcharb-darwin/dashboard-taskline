@@ -16,6 +16,7 @@ interface Project {
   startDate: Date | null;
   targetCompletionDate: Date | null;
   budget: number | null;
+  actualBudget: number | null;
   projectManager: string | null;
 }
 
@@ -36,6 +37,7 @@ export function EditProjectDialog({ project, open, onOpenChange, onSuccess }: Ed
       ? new Date(project.targetCompletionDate).toISOString().split("T")[0]
       : "",
     budget: project.budget ? (project.budget / 100).toString() : "",
+    actualBudget: project.actualBudget ? (project.actualBudget / 100).toString() : "",
     projectManager: project.projectManager || "",
   });
 
@@ -49,6 +51,7 @@ export function EditProjectDialog({ project, open, onOpenChange, onSuccess }: Ed
         ? new Date(project.targetCompletionDate).toISOString().split("T")[0]
         : "",
       budget: project.budget ? (project.budget / 100).toString() : "",
+      actualBudget: project.actualBudget ? (project.actualBudget / 100).toString() : "",
       projectManager: project.projectManager || "",
     });
   }, [project]);
@@ -80,6 +83,9 @@ export function EditProjectDialog({ project, open, onOpenChange, onSuccess }: Ed
       startDate: formData.startDate ? new Date(formData.startDate) : undefined,
       targetCompletionDate: formData.targetCompletionDate ? new Date(formData.targetCompletionDate) : undefined,
       budget: formData.budget ? Math.round(parseFloat(formData.budget) * 100) : undefined,
+      actualBudget: formData.actualBudget
+        ? Math.round(parseFloat(formData.actualBudget) * 100)
+        : undefined,
       projectManager: formData.projectManager || undefined,
     };
     updateMutation.mutate(updateData);
@@ -165,16 +171,31 @@ export function EditProjectDialog({ project, open, onOpenChange, onSuccess }: Ed
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="budget">Budget ($)</Label>
-            <Input
-              id="budget"
-              type="number"
-              step="0.01"
-              value={formData.budget}
-              onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
-              placeholder="0.00"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="budget">Planned Budget ($)</Label>
+              <Input
+                id="budget"
+                type="number"
+                step="0.01"
+                value={formData.budget}
+                onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="actualBudget">Actual Spend ($)</Label>
+              <Input
+                id="actualBudget"
+                type="number"
+                step="0.01"
+                value={formData.actualBudget}
+                onChange={(e) =>
+                  setFormData({ ...formData, actualBudget: e.target.value })
+                }
+                placeholder="0.00"
+              />
+            </div>
           </div>
 
           <DialogFooter>
