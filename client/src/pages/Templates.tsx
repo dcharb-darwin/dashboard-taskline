@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Link } from "wouter";
 import { 
-  FileText, FolderKanban, Plus,
+  FileText, FolderKanban, Plus, Settings,
   Megaphone, Calendar, Presentation, ClipboardList, Share2,
   Search, ImageIcon, Video, Bell, DollarSign, PenTool, FolderOpen
 } from "lucide-react";
@@ -34,18 +34,28 @@ export default function Templates() {
   };
 
   const selectedIconKey = selectedTemplate
-    ? normalizeTemplateKey(selectedTemplate.templateKey || selectedTemplate.name)
+    ? normalizeTemplateKey(
+        selectedTemplate.templateGroupKey || selectedTemplate.templateKey || selectedTemplate.name
+      )
     : "";
   const SelectedTemplateIcon = templateIcons[selectedIconKey] || FolderKanban;
 
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Project Templates</h2>
-          <p className="mt-2 text-muted-foreground">
-            Browse and select from 14 standardized project templates
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight">Project Templates</h2>
+            <p className="mt-2 text-muted-foreground">
+              Browse and select from 14 standardized project templates
+            </p>
+          </div>
+          <Link href="/templates/manage">
+            <Button variant="outline">
+              <Settings className="mr-2 h-4 w-4" />
+              Manage Templates
+            </Button>
+          </Link>
         </div>
 
         {isLoading ? (
@@ -57,7 +67,9 @@ export default function Templates() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {templates?.map((template) => {
-              const iconKey = normalizeTemplateKey(template.templateKey || template.name);
+              const iconKey = normalizeTemplateKey(
+                template.templateGroupKey || template.templateKey || template.name
+              );
               const Icon = templateIcons[iconKey] || FolderKanban;
 
               return (

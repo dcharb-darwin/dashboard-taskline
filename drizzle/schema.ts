@@ -32,10 +32,15 @@ export const templates = mysqlTable("templates", {
   id: int("id").autoincrement().primaryKey(),
   name: text("name").notNull(),
   templateKey: varchar("templateKey", { length: 64 }).notNull().unique(),
+  templateGroupKey: varchar("templateGroupKey", { length: 64 }).notNull(),
+  version: int("version").default(1).notNull(),
+  status: mysqlEnum("status", ["Draft", "Published", "Archived"]).default("Published").notNull(),
   description: text("description"),
   phases: text("phases").notNull(), // JSON array of phase names
   sampleTasks: text("sampleTasks").notNull(), // JSON array of sample task objects
+  uploadSource: varchar("uploadSource", { length: 32 }).default("manual").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type Template = typeof templates.$inferSelect;

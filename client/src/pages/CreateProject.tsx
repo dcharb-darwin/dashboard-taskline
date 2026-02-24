@@ -128,7 +128,9 @@ export default function CreateProject() {
                 const templateTasks = parseTemplateTasks(template.sampleTasks);
                 const taskCount = templateTasks.length;
                 const isSelected = formData.templateId === template.id.toString();
-                const iconKey = normalizeTemplateKey(template.templateKey || template.name);
+                const iconKey = normalizeTemplateKey(
+                  template.templateGroupKey || template.templateKey || template.name
+                );
                 
                 return (
                   <Card
@@ -161,7 +163,8 @@ export default function CreateProject() {
                           <div className="flex-1">
                             <CardTitle className="text-lg">{template.name}</CardTitle>
                             <CardDescription className="mt-1">
-                              {taskCount} tasks • {template.description || "Standard project template"}
+                              v{template.version} • {taskCount} tasks •{" "}
+                              {template.description || "Standard project template"}
                             </CardDescription>
                           </div>
                         </div>

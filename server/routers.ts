@@ -6,6 +6,76 @@ import { z } from "zod";
 
 import * as db from "./db";
 
+const templateTaskInputSchema = z
+  .object({
+    taskId: z.string().optional(),
+    taskDescription: z.string().optional(),
+    description: z.string().optional(),
+    phase: z.string().optional(),
+    priority: z.enum(["High", "Medium", "Low"]).optional(),
+    owner: z.string().optional(),
+    dependency: z.string().optional(),
+    durationDays: z.number().int().positive().optional(),
+    approvalRequired: z.enum(["Yes", "No"]).optional(),
+    deliverableType: z.string().optional(),
+    notes: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const taskDescription = value.taskDescription ?? value.description;
+    if (!taskDescription || !taskDescription.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Each template task needs taskDescription (or description).",
+      });
+    }
+  });
+
+const templateInputSchema = z.object({
+  name: z.string().min(1),
+  templateKey: z.string().min(1),
+  templateGroupKey: z.string().optional(),
+  version: z.number().int().positive().optional(),
+  status: z.enum(["Draft", "Published", "Archived"]).optional(),
+  description: z.string().optional(),
+  phases: z.array(z.string().min(1)),
+  sampleTasks: z.array(templateTaskInputSchema),
+  uploadSource: z.string().optional(),
+});
+
+const normalizeTemplateTasks = (
+  tasks: Array<z.infer<typeof templateTaskInputSchema>>
+) =>
+  tasks.map((task, index) => ({
+    taskId: task.taskId?.trim() || `T${String(index + 1).padStart(3, "0")}`,
+    taskDescription: (task.taskDescription ?? task.description ?? "").trim(),
+    phase: task.phase?.trim() || "Uncategorized",
+    priority: task.priority ?? "Medium",
+    owner: task.owner?.trim() || null,
+    dependency: task.dependency?.trim() || null,
+    durationDays: task.durationDays ?? null,
+    approvalRequired: task.approvalRequired ?? "No",
+    deliverableType: task.deliverableType?.trim() || null,
+    notes: task.notes?.trim() || null,
+  }));
+
+const toTemplateInsert = (input: z.infer<typeof templateInputSchema>) => {
+  const templateKey = input.templateKey.trim();
+  const templateGroupKey =
+    input.templateGroupKey?.trim() || templateKey.replace(/_v\d+$/, "");
+
+  return {
+    name: input.name.trim(),
+    templateKey,
+    templateGroupKey,
+  version: input.version,
+  status: input.status ?? "Draft",
+  description: input.description?.trim() || undefined,
+  phases: JSON.stringify(input.phases.map((phase) => phase.trim()).filter(Boolean)),
+  sampleTasks: JSON.stringify(normalizeTemplateTasks(input.sampleTasks)),
+  uploadSource: input.uploadSource ?? "manual",
+  };
+};
+
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -24,12 +94,134 @@ export const appRouter = router({
   templates: router({
     list: publicProcedure.query(async () => {
       const { getAllTemplates } = await import("./db");
-      return getAllTemplates();
+      return getAllTemplates({ status: "Published" });
     }),
+    listManage: publicProcedure
+      .input(
+        z
+          .object({
+            status: z.enum(["All", "Draft", "Published", "Archived"]).optional(),
+            includeArchived: z.boolean().optional(),
+            templateGroupKey: z.string().optional(),
+          })
+          .optional()
+      )
+      .query(async ({ input }) => {
+        const { getAllTemplates } = await import("./db");
+        return getAllTemplates({
+          status: input?.status ?? "All",
+          includeArchived: input?.includeArchived ?? true,
+          templateGroupKey: input?.templateGroupKey,
+        });
+      }),
     getById: publicProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
       const { getTemplateById } = await import("./db");
       return getTemplateById(input.id);
     }),
+    create: publicProcedure.input(templateInputSchema).mutation(async ({ input }) => {
+      const { createTemplate, getTemplateById } = await import("./db");
+      const id = await createTemplate(toTemplateInsert(input));
+      const template = await getTemplateById(id);
+      if (!template) throw new Error("Failed to create template");
+      return template;
+    }),
+    update: publicProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          data: templateInputSchema.partial(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { updateTemplate, getTemplateById } = await import("./db");
+        const updateData = input.data;
+
+        const normalizedUpdate: Record<string, unknown> = {};
+        if (updateData.name !== undefined) normalizedUpdate.name = updateData.name.trim();
+        if (updateData.templateKey !== undefined) normalizedUpdate.templateKey = updateData.templateKey.trim();
+        if (updateData.templateGroupKey !== undefined) {
+          normalizedUpdate.templateGroupKey = updateData.templateGroupKey.trim();
+        }
+        if (updateData.version !== undefined) normalizedUpdate.version = updateData.version;
+        if (updateData.status !== undefined) normalizedUpdate.status = updateData.status;
+        if (updateData.description !== undefined) {
+          normalizedUpdate.description = updateData.description.trim() || null;
+        }
+        if (updateData.uploadSource !== undefined) {
+          normalizedUpdate.uploadSource = updateData.uploadSource;
+        }
+        if (updateData.phases !== undefined) {
+          normalizedUpdate.phases = JSON.stringify(
+            updateData.phases.map((phase) => phase.trim()).filter(Boolean)
+          );
+        }
+        if (updateData.sampleTasks !== undefined) {
+          normalizedUpdate.sampleTasks = JSON.stringify(
+            normalizeTemplateTasks(updateData.sampleTasks)
+          );
+        }
+
+        await updateTemplate(input.id, normalizedUpdate as any);
+        const template = await getTemplateById(input.id);
+        if (!template) throw new Error("Template not found after update");
+        return template;
+      }),
+    createVersion: publicProcedure
+      .input(z.object({ sourceTemplateId: z.number() }))
+      .mutation(async ({ input }) => {
+        const { createTemplateVersion, getTemplateById } = await import("./db");
+        const id = await createTemplateVersion(input.sourceTemplateId);
+        const template = await getTemplateById(id);
+        if (!template) throw new Error("Failed to create template version");
+        return template;
+      }),
+    publish: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      const { publishTemplate, getTemplateById } = await import("./db");
+      await publishTemplate(input.id);
+      const template = await getTemplateById(input.id);
+      if (!template) throw new Error("Template not found after publish");
+      return template;
+    }),
+    archive: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      const { archiveTemplate, getTemplateById } = await import("./db");
+      await archiveTemplate(input.id);
+      const template = await getTemplateById(input.id);
+      if (!template) throw new Error("Template not found after archive");
+      return template;
+    }),
+    importJson: publicProcedure
+      .input(
+        z.object({
+          templates: z.array(templateInputSchema).min(1),
+          publishImported: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { createTemplate, publishTemplate, getTemplateById } = await import("./db");
+
+        const created = [];
+        for (const templateInput of input.templates) {
+          const id = await createTemplate(
+            toTemplateInsert({
+              ...templateInput,
+              status: input.publishImported
+                ? "Published"
+                : templateInput.status ?? "Draft",
+              uploadSource: "import_json",
+            })
+          );
+          if (input.publishImported) {
+            await publishTemplate(id);
+          }
+          const template = await getTemplateById(id);
+          if (template) created.push(template);
+        }
+
+        return {
+          createdCount: created.length,
+          templates: created,
+        };
+      }),
   }),
 
   // Projects router

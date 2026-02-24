@@ -1,7 +1,8 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   type InsertProject,
+  type InsertTemplate,
   type InsertTask,
   type InsertUser,
   type Project,
@@ -12,6 +13,14 @@ import {
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+
+export type TemplateStatus = Template["status"];
+
+type TemplateQueryOptions = {
+  status?: TemplateStatus | "All";
+  includeArchived?: boolean;
+  templateGroupKey?: string;
+};
 
 type TemplateTaskSeed = {
   taskId: string;
@@ -43,6 +52,16 @@ const templateTask = (
   priority: "Medium",
   ...overrides,
 });
+
+const normalizeTemplateKey = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+const getTemplateGroupKey = (templateKey: string) =>
+  normalizeTemplateKey(templateKey).replace(/_v\d+$/, "");
 
 const TEMPLATE_SEED: TemplateSeed[] = [
   {
@@ -244,10 +263,15 @@ const buildMemoryState = (): MemoryState => {
     id: index + 1,
     name: template.name,
     templateKey: template.key,
+    templateGroupKey: template.key,
+    version: 1,
+    status: "Published",
     description: template.description,
     phases: JSON.stringify(template.phases),
     sampleTasks: JSON.stringify(template.tasks),
+    uploadSource: "seed",
     createdAt: new Date(seedTimestamp),
+    updatedAt: new Date(seedTimestamp),
   }));
 
   const marketingTemplate = templates.find((template) => template.name === "Marketing Campaign");
@@ -487,16 +511,38 @@ export async function getUserByOpenId(openId: string) {
 // TEMPLATE QUERIES
 // ============================================================================
 
-export async function getAllTemplates() {
+const filterTemplates = (
+  templates: Template[],
+  options: TemplateQueryOptions = {}
+) => {
+  const status = options.status ?? "Published";
+  const includeArchived = options.includeArchived ?? false;
+  const templateGroupKey = options.templateGroupKey
+    ? getTemplateGroupKey(options.templateGroupKey)
+    : undefined;
+
+  return templates
+    .filter((template) => {
+      if (status !== "All" && template.status !== status) return false;
+      if (status === "All" && !includeArchived && template.status === "Archived") return false;
+      if (templateGroupKey && template.templateGroupKey !== templateGroupKey) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (a.name !== b.name) return a.name.localeCompare(b.name);
+      return a.version - b.version;
+    });
+};
+
+export async function getAllTemplates(options: TemplateQueryOptions = {}) {
   const db = await getDb();
   if (!db) {
-    return [...memoryState.templates]
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map(copyTemplate);
+    return filterTemplates([...memoryState.templates], options).map(copyTemplate);
   }
 
   const { templates } = await import("../drizzle/schema");
-  return db.select().from(templates).orderBy(templates.name);
+  const rows = await db.select().from(templates).orderBy(templates.name, templates.version);
+  return filterTemplates(rows, options);
 }
 
 export async function getTemplateById(id: number) {
@@ -521,6 +567,155 @@ export async function getTemplateByKey(key: string) {
   const { templates } = await import("../drizzle/schema");
   const result = await db.select().from(templates).where(eq(templates.templateKey, key)).limit(1);
   return result[0];
+}
+
+export async function createTemplate(data: InsertTemplate) {
+  const db = await getDb();
+  const normalizedKey = normalizeTemplateKey(data.templateKey || data.name);
+  const templateGroupKey = getTemplateGroupKey(data.templateGroupKey || normalizedKey);
+
+  if (!db) {
+    const template: Template = {
+      id: memoryState.templates.reduce((max, item) => Math.max(max, item.id), 0) + 1,
+      name: data.name,
+      templateKey: normalizedKey,
+      templateGroupKey,
+      version: data.version ?? 1,
+      status: data.status ?? "Draft",
+      description: data.description ?? null,
+      phases: data.phases,
+      sampleTasks: data.sampleTasks,
+      uploadSource: data.uploadSource ?? "manual",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    memoryState.templates.push(template);
+    return template.id;
+  }
+
+  const { templates } = await import("../drizzle/schema");
+  const result = await db
+    .insert(templates)
+    .values({
+      ...data,
+      templateKey: normalizedKey,
+      templateGroupKey,
+      version: data.version ?? 1,
+      status: data.status ?? "Draft",
+      uploadSource: data.uploadSource ?? "manual",
+    })
+    .$returningId();
+  return result[0]?.id || 0;
+}
+
+export async function updateTemplate(id: number, data: Partial<InsertTemplate>) {
+  const db = await getDb();
+
+  if (!db) {
+    const index = memoryState.templates.findIndex((template) => template.id === id);
+    if (index < 0) return;
+    const current = memoryState.templates[index]!;
+    const templateKey = data.templateKey ? normalizeTemplateKey(data.templateKey) : current.templateKey;
+    const templateGroupKey = data.templateGroupKey
+      ? getTemplateGroupKey(data.templateGroupKey)
+      : current.templateGroupKey;
+
+    memoryState.templates[index] = {
+      ...current,
+      ...data,
+      templateKey,
+      templateGroupKey,
+      description: data.description ?? current.description,
+      phases: data.phases ?? current.phases,
+      sampleTasks: data.sampleTasks ?? current.sampleTasks,
+      uploadSource: data.uploadSource ?? current.uploadSource,
+      updatedAt: new Date(),
+    };
+    return;
+  }
+
+  const { templates } = await import("../drizzle/schema");
+  const updateData: Partial<InsertTemplate> = { ...data };
+
+  if (data.templateKey) {
+    updateData.templateKey = normalizeTemplateKey(data.templateKey);
+  }
+  if (data.templateGroupKey) {
+    updateData.templateGroupKey = getTemplateGroupKey(data.templateGroupKey);
+  }
+
+  await db.update(templates).set(updateData).where(eq(templates.id, id));
+}
+
+export async function archiveTemplate(id: number) {
+  return updateTemplate(id, { status: "Archived" });
+}
+
+export async function publishTemplate(id: number) {
+  const target = await getTemplateById(id);
+  if (!target) throw new Error("Template not found");
+  const groupKey = target.templateGroupKey;
+
+  const db = await getDb();
+  if (!db) {
+    memoryState.templates = memoryState.templates.map((template) => {
+      if (template.templateGroupKey !== groupKey) return template;
+      if (template.id === id) {
+        return {
+          ...template,
+          status: "Published",
+          updatedAt: new Date(),
+        };
+      }
+      if (template.status === "Published") {
+        return {
+          ...template,
+          status: "Archived",
+          updatedAt: new Date(),
+        };
+      }
+      return template;
+    });
+    return;
+  }
+
+  const { templates } = await import("../drizzle/schema");
+
+  await db
+    .update(templates)
+    .set({ status: "Archived" })
+    .where(and(eq(templates.templateGroupKey, groupKey), eq(templates.status, "Published")));
+
+  await db.update(templates).set({ status: "Published" }).where(eq(templates.id, id));
+}
+
+export async function createTemplateVersion(sourceTemplateId: number) {
+  const source = await getTemplateById(sourceTemplateId);
+  if (!source) throw new Error("Source template not found");
+
+  const groupTemplates = await getAllTemplates({
+    status: "All",
+    includeArchived: true,
+    templateGroupKey: source.templateGroupKey,
+  });
+
+  const maxVersion = groupTemplates.reduce((max, template) => Math.max(max, template.version), 0);
+  const nextVersion = maxVersion + 1;
+
+  const newKey = `${source.templateGroupKey}_v${nextVersion}`;
+
+  return createTemplate({
+    name: source.name,
+    templateKey: newKey,
+    templateGroupKey: source.templateGroupKey,
+    version: nextVersion,
+    status: "Draft",
+    description: source.description ?? undefined,
+    phases: source.phases,
+    sampleTasks: source.sampleTasks,
+    uploadSource: "version",
+  });
 }
 
 // ============================================================================
