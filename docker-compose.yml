@@ -1,7 +1,4 @@
-version: '3.8'
-
 services:
-  # MySQL Database
   db:
     image: mysql:8.0
     container_name: rtc-project-manager-db
@@ -21,11 +18,41 @@ services:
       timeout: 5s
       retries: 5
 
-  # Application
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: tools
+    command: sh -lc "pnpm db:push"
+    container_name: rtc-project-manager-migrate
+    restart: "no"
+    environment:
+      DATABASE_URL: mysql://rtc_user:rtc_password@db:3306/rtc_project_manager
+    depends_on:
+      db:
+        condition: service_healthy
+
+  seed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: tools
+    command: sh -lc "pnpm exec tsx seed-database.mjs"
+    container_name: rtc-project-manager-seed
+    restart: "no"
+    profiles:
+      - seed
+    environment:
+      DATABASE_URL: mysql://rtc_user:rtc_password@db:3306/rtc_project_manager
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
   app:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runtime
     container_name: rtc-project-manager-app
     restart: unless-stopped
     ports:
@@ -42,8 +69,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - ./drizzle:/app/drizzle
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   mysql_data:

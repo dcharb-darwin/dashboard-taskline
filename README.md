@@ -9,21 +9,15 @@ Choose your preferred deployment method:
 ### Option 1: Docker (Recommended)
 
 ```bash
-# Extract archive
-tar -xzf rtc-project-manager-complete.tar.gz
-cd rtc-project-manager
+# Clone and enter repo
+git clone https://github.com/dcharb-darwin/dashboard-taskline.git
+cd dashboard-taskline
 
-# Start with Docker Compose
-docker-compose up -d
-
-# Initialize database
-docker-compose exec app pnpm db:push
-
-# Seed sample data (optional)
-docker-compose exec app pnpm exec tsx seed-database.mjs
+# One command: build + DB + migrations + optional seed + app
+./scripts/docker-quickstart.sh
 
 # Access application
-open http://localhost:3000
+# http://localhost:3000
 ```
 
 See **DOCKER_SETUP.md** for detailed Docker instructions.
@@ -143,7 +137,6 @@ rtc-project-manager/
 - **LOCAL_DEPLOYMENT.md** - Complete guide for local installation and development
 - **DOCKER_SETUP.md** - Docker deployment instructions and troubleshooting
 - **todo.md** - Development task tracking and feature checklist
-- **docs/AGENT_WORKFLOW.md** - Project-aware agent routing and execution workflow
 
 ## Requirements
 
@@ -180,7 +173,10 @@ rtc-project-manager/
 - `pnpm db:push` - Apply database migrations
 - `pnpm check` - TypeScript type checking
 - `pnpm format` - Format code with Prettier
-- `pnpm agent:profile` - Resolve and print the active agent workflow profile
+- `npm run docker:quickstart` - Build and run Docker stack with migrations (+ seed)
+- `npm run docker:up` - Start Docker stack in background
+- `npm run docker:down` - Stop Docker stack
+- `npm run docker:logs` - Tail application logs
 
 ## Testing
 

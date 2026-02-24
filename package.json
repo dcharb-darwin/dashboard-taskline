@@ -11,7 +11,10 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
-    "agent:profile": "node scripts/agent-profile.mjs"
+    "docker:quickstart": "bash scripts/docker-quickstart.sh",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f app"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",
