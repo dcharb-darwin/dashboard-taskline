@@ -238,7 +238,9 @@ export default function Templates() {
     try {
       await updateTemplateTasks.mutateAsync({
         id: selectedTemplate.id,
-        sampleTasks: persistedTasks,
+        data: {
+          sampleTasks: persistedTasks,
+        },
       });
     } catch (error: any) {
       toast.error(`Failed to save template tasks: ${error?.message || "Unknown error"}`);

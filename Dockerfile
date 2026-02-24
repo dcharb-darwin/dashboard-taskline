@@ -41,7 +41,6 @@ COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=builder /app/seed-database.mjs ./seed-database.mjs
-COPY --from=builder /app/seed-database-old.mjs ./seed-database-old.mjs
 
 # Expose port
 EXPOSE 3000

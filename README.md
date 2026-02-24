@@ -14,13 +14,10 @@ tar -xzf rtc-project-manager-complete.tar.gz
 cd rtc-project-manager
 
 # Start with Docker Compose
-docker-compose up -d
-
-# Initialize database
-docker-compose exec app pnpm db:push
+docker compose up -d --build
 
 # Seed sample data (optional)
-docker-compose exec app pnpm db:seed
+docker compose --profile seed up -d seed
 
 # Access application
 open http://localhost:3000
