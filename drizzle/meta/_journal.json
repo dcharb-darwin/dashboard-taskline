@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1768447107174,
+      "tag": "0000_panoramic_jetstream",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1768447236117,
+      "tag": "0001_faulty_kate_bishop",
+      "breakpoints": true
+    }
+  ]
+}
