@@ -396,7 +396,7 @@ export default function ProjectDetail() {
       ? Math.round((tasksByStatus.Complete.length / tasks.length) * 100)
       : 0;
 
-  const visibleTaskIds = useMemo(() => sortedTasks.map((task) => task.id), [sortedTasks]);
+  const visibleTaskIds = sortedTasks.map((task) => task.id);
   const allVisibleSelected =
     visibleTaskIds.length > 0 &&
     visibleTaskIds.every((taskId) => selectedTaskIds.includes(taskId));
