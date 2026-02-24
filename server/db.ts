@@ -1,6 +1,8 @@
 import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
+  type AuditLog,
+  type InsertAuditLog,
   type InsertNotificationEvent,
   type InsertNotificationPreference,
   type InsertProjectActivity,
@@ -8,7 +10,9 @@ import {
   type InsertProject,
   type InsertTemplate,
   type InsertTask,
+  type InsertUserAccessPolicy,
   type InsertUser,
+  type InsertWebhookSubscription,
   type NotificationEvent,
   type NotificationPreference,
   type ProjectActivity,
@@ -16,6 +20,8 @@ import {
   type Project,
   type Task,
   type Template,
+  type UserAccessPolicy,
+  type WebhookSubscription,
   users,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -25,6 +31,7 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export type TemplateStatus = Template["status"];
 export type NotificationScopeType = NotificationPreference["scopeType"];
 export type NotificationEventType = NotificationEvent["eventType"];
+export type GovernanceRole = UserAccessPolicy["accessRole"];
 
 const YES_NO_YES = "Yes" as const;
 const YES_NO_NO = "No" as const;
@@ -55,6 +62,50 @@ export type CriticalPathSummary = {
   totalDurationDays: number;
   blockedByCycle: boolean;
 };
+
+export type PortfolioProjectHealth = "On Track" | "At Risk" | "Off Track";
+
+export type PortfolioSummary = {
+  totals: {
+    totalProjects: number;
+    activeProjects: number;
+    onTrack: number;
+    atRisk: number;
+    offTrack: number;
+    averageCompletionPercent: number;
+  };
+  milestoneConfidence: {
+    high: number;
+    medium: number;
+    low: number;
+  };
+  throughputByWeek: Array<{
+    weekStart: string;
+    completedTasks: number;
+  }>;
+  topRisks: Array<{
+    projectId: number;
+    projectName: string;
+    health: PortfolioProjectHealth;
+    overdueTasks: number;
+    blockedTasks: number;
+  }>;
+};
+
+export type AuditEntityType = AuditLog["entityType"];
+
+type WebhookEventName =
+  | "project.created"
+  | "project.updated"
+  | "project.deleted"
+  | "task.created"
+  | "task.updated"
+  | "task.deleted"
+  | "template.created"
+  | "template.updated"
+  | "template.published"
+  | "template.archived"
+  | "integration.external_event";
 
 type DeliveryChannel = "in_app" | "email" | "slack" | "webhook";
 
@@ -303,12 +354,18 @@ type MemoryState = {
   projectActivities: ProjectActivity[];
   notificationPreferences: NotificationPreference[];
   notificationEvents: NotificationEvent[];
+  auditLogs: AuditLog[];
+  webhookSubscriptions: WebhookSubscription[];
+  userAccessPolicies: UserAccessPolicy[];
   nextProjectId: number;
   nextTaskId: number;
   nextProjectCommentId: number;
   nextProjectActivityId: number;
   nextNotificationPreferenceId: number;
   nextNotificationEventId: number;
+  nextAuditLogId: number;
+  nextWebhookSubscriptionId: number;
+  nextUserAccessPolicyId: number;
 };
 
 const copyTemplate = (template: Template): Template => ({ ...template });
@@ -320,6 +377,11 @@ const copyNotificationPreference = (
   preference: NotificationPreference
 ): NotificationPreference => ({ ...preference });
 const copyNotificationEvent = (event: NotificationEvent): NotificationEvent => ({ ...event });
+const copyAuditLog = (auditLog: AuditLog): AuditLog => ({ ...auditLog });
+const copyWebhookSubscription = (
+  webhook: WebhookSubscription
+): WebhookSubscription => ({ ...webhook });
+const copyUserAccessPolicy = (policy: UserAccessPolicy): UserAccessPolicy => ({ ...policy });
 
 const asYesNo = (value: boolean) => (value ? YES_NO_YES : YES_NO_NO);
 const isEnabled = (value: "Yes" | "No" | null | undefined) => value === YES_NO_YES;
@@ -495,6 +557,17 @@ const buildMemoryState = (): MemoryState => {
     },
   ];
 
+  const userAccessPolicies: UserAccessPolicy[] = [
+    {
+      id: 1,
+      openId: "test-user",
+      accessRole: "Admin",
+      updatedBy: "System",
+      createdAt: new Date(seedTimestamp),
+      updatedAt: new Date(seedTimestamp),
+    },
+  ];
+
   return {
     templates,
     projects,
@@ -503,12 +576,18 @@ const buildMemoryState = (): MemoryState => {
     projectActivities: [],
     notificationPreferences,
     notificationEvents: [],
+    auditLogs: [],
+    webhookSubscriptions: [],
+    userAccessPolicies,
     nextProjectId: projects.length + 1,
     nextTaskId: tasks.length + 1,
     nextProjectCommentId: 1,
     nextProjectActivityId: 1,
     nextNotificationPreferenceId: notificationPreferences.length + 1,
     nextNotificationEventId: 1,
+    nextAuditLogId: 1,
+    nextWebhookSubscriptionId: 1,
+    nextUserAccessPolicyId: userAccessPolicies.length + 1,
   };
 };
 
@@ -561,6 +640,38 @@ const getMentionHandles = (content: string) => {
     if (handle) handles.add(handle);
   }
   return Array.from(handles);
+};
+
+const parseWebhookEvents = (value: string | null | undefined): WebhookEventName[] =>
+  parseJsonArray(value).filter((event): event is WebhookEventName => event.length > 0);
+
+const computeProjectHealthFromTasks = (
+  project: Project,
+  projectTasks: Task[]
+): PortfolioProjectHealth => {
+  const now = new Date();
+  const openTasks = projectTasks.filter((task) => task.status !== "Complete");
+  const overdueOpenTasks = openTasks.filter(
+    (task) => task.dueDate && task.dueDate.getTime() < now.getTime()
+  ).length;
+  const blockedTasks = projectTasks.filter((task) => task.status === "On Hold").length;
+
+  if (overdueOpenTasks > 0 || blockedTasks >= 3 || project.status === "On Hold") {
+    return "Off Track";
+  }
+  if (blockedTasks > 0 || overdueOpenTasks > 0 || project.status === "Planning") {
+    return "At Risk";
+  }
+  return "On Track";
+};
+
+const getWeekStartIso = (date: Date) => {
+  const weekStart = new Date(date);
+  const day = weekStart.getUTCDay();
+  const shift = day === 0 ? -6 : 1 - day;
+  weekStart.setUTCDate(weekStart.getUTCDate() + shift);
+  weekStart.setUTCHours(0, 0, 0, 0);
+  return weekStart.toISOString().slice(0, 10);
 };
 
 const parseDependencies = (dependency: string | null) =>
@@ -683,6 +794,115 @@ const computeDashboardStats = (allProjects: Project[], allTasks: Task[]) => {
   };
 };
 
+const computePortfolioSummary = (
+  allProjects: Project[],
+  allTasks: Task[]
+): PortfolioSummary => {
+  const now = new Date();
+  const tasksByProject = new Map<number, Task[]>();
+  for (const task of allTasks) {
+    if (!tasksByProject.has(task.projectId)) {
+      tasksByProject.set(task.projectId, []);
+    }
+    tasksByProject.get(task.projectId)!.push(task);
+  }
+
+  const projectHealthRows = allProjects.map((project) => {
+    const projectTasks = tasksByProject.get(project.id) ?? [];
+    const health = computeProjectHealthFromTasks(project, projectTasks);
+    const overdueTasks = projectTasks.filter(
+      (task) =>
+        task.status !== "Complete" &&
+        task.dueDate &&
+        task.dueDate.getTime() < now.getTime()
+    ).length;
+    const blockedTasks = projectTasks.filter((task) => task.status === "On Hold").length;
+
+    return {
+      projectId: project.id,
+      projectName: project.name,
+      health,
+      overdueTasks,
+      blockedTasks,
+      completionPercent:
+        projectTasks.length > 0
+          ? Math.round(
+              projectTasks.reduce(
+                (sum, task) => sum + (task.completionPercent ?? 0),
+                0
+              ) / projectTasks.length
+            )
+          : 0,
+    };
+  });
+
+  const onTrack = projectHealthRows.filter((row) => row.health === "On Track").length;
+  const atRisk = projectHealthRows.filter((row) => row.health === "At Risk").length;
+  const offTrack = projectHealthRows.filter((row) => row.health === "Off Track").length;
+
+  const confidence = {
+    high: projectHealthRows.filter((row) => row.health === "On Track").length,
+    medium: projectHealthRows.filter((row) => row.health === "At Risk").length,
+    low: projectHealthRows.filter((row) => row.health === "Off Track").length,
+  };
+
+  const throughputCounter = new Map<string, number>();
+  for (const task of allTasks) {
+    if (task.status !== "Complete") continue;
+    const completionDate = task.updatedAt ?? task.createdAt;
+    const weekStart = getWeekStartIso(completionDate);
+    throughputCounter.set(weekStart, (throughputCounter.get(weekStart) ?? 0) + 1);
+  }
+
+  const throughputByWeek = Array.from(throughputCounter.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-8)
+    .map(([weekStart, completedTasks]) => ({
+      weekStart,
+      completedTasks,
+    }));
+
+  const topRisks = projectHealthRows
+    .filter((row) => row.health !== "On Track")
+    .sort((a, b) => {
+      if (a.overdueTasks !== b.overdueTasks) return b.overdueTasks - a.overdueTasks;
+      if (a.blockedTasks !== b.blockedTasks) return b.blockedTasks - a.blockedTasks;
+      return a.projectName.localeCompare(b.projectName);
+    })
+    .slice(0, 5)
+    .map((row) => ({
+      projectId: row.projectId,
+      projectName: row.projectName,
+      health: row.health,
+      overdueTasks: row.overdueTasks,
+      blockedTasks: row.blockedTasks,
+    }));
+
+  const totalCompletionPercent =
+    projectHealthRows.length > 0
+      ? Math.round(
+          projectHealthRows.reduce((sum, row) => sum + row.completionPercent, 0) /
+            projectHealthRows.length
+        )
+      : 0;
+
+  return {
+    totals: {
+      totalProjects: allProjects.length,
+      activeProjects: allProjects.filter(
+        (project) => project.status === "Active" || project.status === "Planning"
+      ).length,
+      onTrack,
+      atRisk,
+      offTrack,
+      averageCompletionPercent: totalCompletionPercent,
+    },
+    milestoneConfidence: confidence,
+    throughputByWeek,
+    topRisks,
+  };
+};
+
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -765,6 +985,35 @@ export async function getUserByOpenId(openId: string) {
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
 
   return result.length > 0 ? result[0] : undefined;
+}
+
+export async function listUsers(limit = 100) {
+  const boundedLimit = Math.max(1, Math.min(limit, 500));
+  const db = await getDb();
+  if (!db) {
+    return [] as Array<{
+      openId: string;
+      name: string | null;
+      email: string | null;
+      role: "user" | "admin";
+    }>;
+  }
+
+  const rows = await db.select().from(users).orderBy(desc(users.updatedAt)).limit(boundedLimit);
+  return rows.map((row) => ({
+    openId: row.openId,
+    name: row.name ?? null,
+    email: row.email ?? null,
+    role: row.role,
+  }));
+}
+
+export async function updateUserBaseRole(openId: string, role: "user" | "admin") {
+  const db = await getDb();
+  if (!db) {
+    return;
+  }
+  await db.update(users).set({ role }).where(eq(users.openId, openId));
 }
 
 // ============================================================================
@@ -1339,6 +1588,18 @@ export async function getDashboardStats() {
   return computeDashboardStats(allProjects, allTasks);
 }
 
+export async function getPortfolioSummary() {
+  const db = await getDb();
+  if (!db) {
+    return computePortfolioSummary(memoryState.projects, memoryState.tasks);
+  }
+
+  const { projects, tasks } = await import("../drizzle/schema");
+  const allProjects = await db.select().from(projects);
+  const allTasks = await db.select().from(tasks);
+  return computePortfolioSummary(allProjects, allTasks);
+}
+
 // ============================================================================
 // COLLABORATION QUERIES
 // ============================================================================
@@ -1830,4 +2091,357 @@ export function toNotificationEventView(event: NotificationEvent) {
     ...event,
     channels: parseJsonArray(event.channels),
   };
+}
+
+// ============================================================================
+// GOVERNANCE AND INTEGRATIONS
+// ============================================================================
+
+export async function createAuditLog(data: InsertAuditLog) {
+  const db = await getDb();
+  if (!db) {
+    const auditLog: AuditLog = {
+      id: memoryState.nextAuditLogId++,
+      entityType: data.entityType,
+      entityId: data.entityId,
+      action: data.action,
+      actorOpenId: data.actorOpenId ?? null,
+      actorName: data.actorName,
+      details: data.details ?? null,
+      createdAt: new Date(),
+    };
+    memoryState.auditLogs.push(auditLog);
+    return copyAuditLog(auditLog);
+  }
+
+  const { auditLogs } = await import("../drizzle/schema");
+  const result = await db.insert(auditLogs).values(data).$returningId();
+  const id = result[0]?.id;
+  if (!id) throw new Error("Failed to create audit log");
+  const created = await db.select().from(auditLogs).where(eq(auditLogs.id, id)).limit(1);
+  if (!created[0]) throw new Error("Failed to fetch audit log");
+  return created[0];
+}
+
+export async function listAuditLogs(options?: {
+  limit?: number;
+  entityType?: AuditEntityType;
+}) {
+  const limit = Math.max(1, Math.min(options?.limit ?? 200, 500));
+  const db = await getDb();
+  if (!db) {
+    return memoryState.auditLogs
+      .filter((item) =>
+        options?.entityType ? item.entityType === options.entityType : true
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit)
+      .map(copyAuditLog);
+  }
+
+  const { auditLogs } = await import("../drizzle/schema");
+  if (options?.entityType) {
+    return db
+      .select()
+      .from(auditLogs)
+      .where(eq(auditLogs.entityType, options.entityType))
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(limit);
+  }
+
+  return db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(limit);
+}
+
+export async function listWebhookSubscriptions(options?: { includeInactive?: boolean }) {
+  const includeInactive = options?.includeInactive ?? false;
+  const db = await getDb();
+  if (!db) {
+    return memoryState.webhookSubscriptions
+      .filter((webhook) => includeInactive || webhook.isActive === YES_NO_YES)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(copyWebhookSubscription);
+  }
+
+  const { webhookSubscriptions } = await import("../drizzle/schema");
+  if (includeInactive) {
+    return db.select().from(webhookSubscriptions).orderBy(webhookSubscriptions.name);
+  }
+  return db
+    .select()
+    .from(webhookSubscriptions)
+    .where(eq(webhookSubscriptions.isActive, YES_NO_YES))
+    .orderBy(webhookSubscriptions.name);
+}
+
+export async function createWebhookSubscription(data: {
+  name: string;
+  endpointUrl: string;
+  events: WebhookEventName[];
+  secret?: string | null;
+  isActive?: boolean;
+}) {
+  const db = await getDb();
+  if (!db) {
+    const webhook: WebhookSubscription = {
+      id: memoryState.nextWebhookSubscriptionId++,
+      name: data.name,
+      endpointUrl: data.endpointUrl,
+      events: JSON.stringify(data.events),
+      secret: data.secret ?? null,
+      isActive: asYesNo(data.isActive ?? true),
+      lastTriggeredAt: null,
+      lastStatus: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    memoryState.webhookSubscriptions.push(webhook);
+    return copyWebhookSubscription(webhook);
+  }
+
+  const { webhookSubscriptions } = await import("../drizzle/schema");
+  const result = await db
+    .insert(webhookSubscriptions)
+    .values({
+      name: data.name,
+      endpointUrl: data.endpointUrl,
+      events: JSON.stringify(data.events),
+      secret: data.secret ?? null,
+      isActive: asYesNo(data.isActive ?? true),
+    })
+    .$returningId();
+  const id = result[0]?.id;
+  if (!id) throw new Error("Failed to create webhook subscription");
+  const created = await db
+    .select()
+    .from(webhookSubscriptions)
+    .where(eq(webhookSubscriptions.id, id))
+    .limit(1);
+  if (!created[0]) throw new Error("Failed to fetch webhook subscription");
+  return created[0];
+}
+
+export async function updateWebhookSubscription(
+  id: number,
+  patch: Partial<{
+    name: string;
+    endpointUrl: string;
+    events: WebhookEventName[];
+    secret: string | null;
+    isActive: boolean;
+    lastStatus: string | null;
+    lastTriggeredAt: Date | null;
+  }>
+) {
+  const db = await getDb();
+  const normalizedPatch: Partial<InsertWebhookSubscription> = {};
+  if (patch.name !== undefined) normalizedPatch.name = patch.name;
+  if (patch.endpointUrl !== undefined) normalizedPatch.endpointUrl = patch.endpointUrl;
+  if (patch.events !== undefined) normalizedPatch.events = JSON.stringify(patch.events);
+  if (patch.secret !== undefined) normalizedPatch.secret = patch.secret;
+  if (patch.isActive !== undefined) normalizedPatch.isActive = asYesNo(patch.isActive);
+  if (patch.lastStatus !== undefined) normalizedPatch.lastStatus = patch.lastStatus;
+  if (patch.lastTriggeredAt !== undefined) {
+    normalizedPatch.lastTriggeredAt = patch.lastTriggeredAt;
+  }
+
+  if (!db) {
+    const index = memoryState.webhookSubscriptions.findIndex((webhook) => webhook.id === id);
+    if (index < 0) return undefined;
+    const current = memoryState.webhookSubscriptions[index]!;
+    const updated: WebhookSubscription = {
+      ...current,
+      ...normalizedPatch,
+      updatedAt: new Date(),
+    };
+    memoryState.webhookSubscriptions[index] = updated;
+    return copyWebhookSubscription(updated);
+  }
+
+  const { webhookSubscriptions } = await import("../drizzle/schema");
+  await db.update(webhookSubscriptions).set(normalizedPatch).where(eq(webhookSubscriptions.id, id));
+  const updated = await db
+    .select()
+    .from(webhookSubscriptions)
+    .where(eq(webhookSubscriptions.id, id))
+    .limit(1);
+  return updated[0];
+}
+
+export async function deleteWebhookSubscription(id: number) {
+  const db = await getDb();
+  if (!db) {
+    memoryState.webhookSubscriptions = memoryState.webhookSubscriptions.filter(
+      (webhook) => webhook.id !== id
+    );
+    return;
+  }
+  const { webhookSubscriptions } = await import("../drizzle/schema");
+  await db.delete(webhookSubscriptions).where(eq(webhookSubscriptions.id, id));
+}
+
+export async function dispatchWebhookEvent(args: {
+  event: WebhookEventName;
+  payload: Record<string, unknown>;
+}) {
+  const subscriptions = await listWebhookSubscriptions({ includeInactive: false });
+  const eligible = subscriptions.filter((subscription) =>
+    parseWebhookEvents(subscription.events).includes(args.event)
+  );
+
+  const deliveries: Array<{
+    webhookId: number;
+    success: boolean;
+    status: number | null;
+    error?: string;
+  }> = [];
+
+  for (const subscription of eligible) {
+    try {
+      const response = await fetch(subscription.endpointUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-rtc-event": args.event,
+          ...(subscription.secret ? { "x-rtc-webhook-secret": subscription.secret } : {}),
+        },
+        body: JSON.stringify({
+          event: args.event,
+          occurredAt: new Date().toISOString(),
+          payload: args.payload,
+        }),
+      });
+
+      const success = response.ok;
+      deliveries.push({
+        webhookId: subscription.id,
+        success,
+        status: response.status,
+      });
+      await updateWebhookSubscription(subscription.id, {
+        lastTriggeredAt: new Date(),
+        lastStatus: success
+          ? `ok:${response.status}`
+          : `error:${response.status} ${response.statusText}`,
+      });
+    } catch (error) {
+      deliveries.push({
+        webhookId: subscription.id,
+        success: false,
+        status: null,
+        error: error instanceof Error ? error.message : "unknown error",
+      });
+      await updateWebhookSubscription(subscription.id, {
+        lastTriggeredAt: new Date(),
+        lastStatus:
+          error instanceof Error ? `error:${error.message}` : "error:unknown",
+      });
+    }
+  }
+
+  return {
+    attempted: deliveries.length,
+    delivered: deliveries.filter((delivery) => delivery.success).length,
+    deliveries,
+  };
+}
+
+export async function getUserAccessPolicy(openId: string) {
+  const db = await getDb();
+  if (!db) {
+    const policy = memoryState.userAccessPolicies.find((item) => item.openId === openId);
+    return policy ? copyUserAccessPolicy(policy) : undefined;
+  }
+  const { userAccessPolicies } = await import("../drizzle/schema");
+  const result = await db
+    .select()
+    .from(userAccessPolicies)
+    .where(eq(userAccessPolicies.openId, openId))
+    .limit(1);
+  return result[0];
+}
+
+export async function upsertUserAccessPolicy(args: {
+  openId: string;
+  accessRole: GovernanceRole;
+  updatedBy?: string | null;
+}) {
+  const db = await getDb();
+  if (!db) {
+    const index = memoryState.userAccessPolicies.findIndex(
+      (policy) => policy.openId === args.openId
+    );
+    if (index >= 0) {
+      const current = memoryState.userAccessPolicies[index]!;
+      const updated: UserAccessPolicy = {
+        ...current,
+        accessRole: args.accessRole,
+        updatedBy: args.updatedBy ?? null,
+        updatedAt: new Date(),
+      };
+      memoryState.userAccessPolicies[index] = updated;
+      return copyUserAccessPolicy(updated);
+    }
+
+    const created: UserAccessPolicy = {
+      id: memoryState.nextUserAccessPolicyId++,
+      openId: args.openId,
+      accessRole: args.accessRole,
+      updatedBy: args.updatedBy ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    memoryState.userAccessPolicies.push(created);
+    return copyUserAccessPolicy(created);
+  }
+
+  const { userAccessPolicies } = await import("../drizzle/schema");
+  const existing = await getUserAccessPolicy(args.openId);
+  if (existing) {
+    await db
+      .update(userAccessPolicies)
+      .set({
+        accessRole: args.accessRole,
+        updatedBy: args.updatedBy ?? null,
+      })
+      .where(eq(userAccessPolicies.id, existing.id));
+  } else {
+    await db.insert(userAccessPolicies).values({
+      openId: args.openId,
+      accessRole: args.accessRole,
+      updatedBy: args.updatedBy ?? null,
+    });
+  }
+  const policy = await getUserAccessPolicy(args.openId);
+  if (!policy) throw new Error("Failed to upsert user access policy");
+  return policy;
+}
+
+export async function listUserAccessPolicies(limit = 200) {
+  const boundedLimit = Math.max(1, Math.min(limit, 500));
+  const db = await getDb();
+  if (!db) {
+    return memoryState.userAccessPolicies
+      .slice()
+      .sort((a, b) => a.openId.localeCompare(b.openId))
+      .slice(0, boundedLimit)
+      .map(copyUserAccessPolicy);
+  }
+  const { userAccessPolicies } = await import("../drizzle/schema");
+  return db
+    .select()
+    .from(userAccessPolicies)
+    .orderBy(userAccessPolicies.openId)
+    .limit(boundedLimit);
+}
+
+export async function resolveGovernanceRole(openId: string | null | undefined): Promise<GovernanceRole> {
+  if (!openId) return "Viewer";
+
+  const policy = await getUserAccessPolicy(openId);
+  if (policy) return policy.accessRole;
+
+  const user = await getUserByOpenId(openId);
+  if (user?.role === "admin") return "Admin";
+  if (user) return "Editor";
+  return "Viewer";
 }

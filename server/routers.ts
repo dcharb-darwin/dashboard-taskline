@@ -1,8 +1,9 @@
 import { COOKIE_NAME } from "@shared/const";
 import type { TrpcContext } from "./_core/context";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { ENV } from "./_core/env";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 
 import * as db from "./db";
@@ -143,6 +144,62 @@ const shiftDateByDays = (value: Date | null | undefined, days: number) => {
   return shifted;
 };
 
+type GovernanceEntityType =
+  | "project"
+  | "task"
+  | "template"
+  | "integration"
+  | "webhook"
+  | "user_access";
+
+type WebhookEventName =
+  | "project.created"
+  | "project.updated"
+  | "project.deleted"
+  | "task.created"
+  | "task.updated"
+  | "task.deleted"
+  | "template.created"
+  | "template.updated"
+  | "template.published"
+  | "template.archived"
+  | "integration.external_event";
+
+const emitGovernanceEvent = async (args: {
+  ctx: TrpcContext;
+  entityType: GovernanceEntityType;
+  entityId: string;
+  action: string;
+  webhookEvent?: WebhookEventName;
+  payload?: Record<string, unknown>;
+}) => {
+  const actorName = getActorName(args.ctx.user);
+  const actorOpenId = args.ctx.user?.openId ?? null;
+  const { createAuditLog, dispatchWebhookEvent } = await import("./db");
+  await createAuditLog({
+    entityType: args.entityType,
+    entityId: args.entityId,
+    action: args.action,
+    actorOpenId,
+    actorName,
+    details: args.payload ? JSON.stringify(args.payload) : null,
+  });
+
+  if (args.webhookEvent) {
+    await dispatchWebhookEvent({
+      event: args.webhookEvent,
+      payload: {
+        entityType: args.entityType,
+        entityId: args.entityId,
+        action: args.action,
+        actorName,
+        actorOpenId,
+        ...(args.payload ?? {}),
+      },
+    });
+  }
+};
+
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -185,11 +242,23 @@ export const appRouter = router({
       const { getTemplateById } = await import("./db");
       return getTemplateById(input.id);
     }),
-    create: publicProcedure.input(templateInputSchema).mutation(async ({ input }) => {
+    create: publicProcedure.input(templateInputSchema).mutation(async ({ input, ctx }) => {
       const { createTemplate, getTemplateById } = await import("./db");
       const id = await createTemplate(toTemplateInsert(input));
       const template = await getTemplateById(id);
       if (!template) throw new Error("Failed to create template");
+      await emitGovernanceEvent({
+        ctx,
+        entityType: "template",
+        entityId: String(template.id),
+        action: "template.create",
+        webhookEvent: "template.created",
+        payload: {
+          templateKey: template.templateKey,
+          status: template.status,
+          version: template.version,
+        },
+      });
       return template;
     }),
     update: publicProcedure
@@ -199,7 +268,7 @@ export const appRouter = router({
           data: templateInputSchema.partial(),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { updateTemplate, getTemplateById } = await import("./db");
         const updateData = input.data;
 
@@ -231,29 +300,74 @@ export const appRouter = router({
         await updateTemplate(input.id, normalizedUpdate as any);
         const template = await getTemplateById(input.id);
         if (!template) throw new Error("Template not found after update");
+        await emitGovernanceEvent({
+          ctx,
+          entityType: "template",
+          entityId: String(template.id),
+          action: "template.update",
+          webhookEvent: "template.updated",
+          payload: {
+            changedFields: Object.keys(normalizedUpdate),
+            status: template.status,
+            version: template.version,
+          },
+        });
         return template;
       }),
     createVersion: publicProcedure
       .input(z.object({ sourceTemplateId: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { createTemplateVersion, getTemplateById } = await import("./db");
         const id = await createTemplateVersion(input.sourceTemplateId);
         const template = await getTemplateById(id);
         if (!template) throw new Error("Failed to create template version");
+        await emitGovernanceEvent({
+          ctx,
+          entityType: "template",
+          entityId: String(template.id),
+          action: "template.create_version",
+          webhookEvent: "template.created",
+          payload: {
+            templateGroupKey: template.templateGroupKey,
+            version: template.version,
+          },
+        });
         return template;
       }),
-    publish: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    publish: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
       const { publishTemplate, getTemplateById } = await import("./db");
       await publishTemplate(input.id);
       const template = await getTemplateById(input.id);
       if (!template) throw new Error("Template not found after publish");
+      await emitGovernanceEvent({
+        ctx,
+        entityType: "template",
+        entityId: String(template.id),
+        action: "template.publish",
+        webhookEvent: "template.published",
+        payload: {
+          templateGroupKey: template.templateGroupKey,
+          version: template.version,
+        },
+      });
       return template;
     }),
-    archive: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    archive: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
       const { archiveTemplate, getTemplateById } = await import("./db");
       await archiveTemplate(input.id);
       const template = await getTemplateById(input.id);
       if (!template) throw new Error("Template not found after archive");
+      await emitGovernanceEvent({
+        ctx,
+        entityType: "template",
+        entityId: String(template.id),
+        action: "template.archive",
+        webhookEvent: "template.archived",
+        payload: {
+          templateGroupKey: template.templateGroupKey,
+          version: template.version,
+        },
+      });
       return template;
     }),
     importJson: publicProcedure
@@ -263,7 +377,7 @@ export const appRouter = router({
           publishImported: z.boolean().optional(),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { createTemplate, publishTemplate, getTemplateById } = await import("./db");
 
         const created = [];
@@ -281,7 +395,21 @@ export const appRouter = router({
             await publishTemplate(id);
           }
           const template = await getTemplateById(id);
-          if (template) created.push(template);
+          if (template) {
+            created.push(template);
+            await emitGovernanceEvent({
+              ctx,
+              entityType: "template",
+              entityId: String(template.id),
+              action: "template.import",
+              webhookEvent: "template.created",
+              payload: {
+                templateKey: template.templateKey,
+                imported: true,
+                published: input.publishImported === true,
+              },
+            });
+          }
         }
 
         return {
@@ -316,7 +444,7 @@ export const appRouter = router({
           status: z.enum(["Planning", "Active", "On Hold", "Complete"]).optional(),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { createProject, createTask, getTemplateById } = await import("./db");
         const projectId = await createProject(input);
         
@@ -387,6 +515,18 @@ export const appRouter = router({
           }
         }
         
+        await emitGovernanceEvent({
+          ctx,
+          entityType: "project",
+          entityId: String(projectId),
+          action: "project.create",
+          webhookEvent: "project.created",
+          payload: {
+            templateType: input.templateType,
+            status: input.status ?? "Planning",
+          },
+        });
+
         return { id: projectId };
       }),
     update: publicProcedure
@@ -403,15 +543,33 @@ export const appRouter = router({
           status: z.enum(["Planning", "Active", "On Hold", "Complete"]).optional(),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;
         const { updateProject } = await import("./db");
         await updateProject(id, data);
+        await emitGovernanceEvent({
+          ctx,
+          entityType: "project",
+          entityId: String(id),
+          action: "project.update",
+          webhookEvent: "project.updated",
+          payload: {
+            changedFields: Object.keys(data),
+            status: data.status,
+          },
+        });
         return { success: true };
       }),
-    delete: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    delete: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
       const { deleteProject } = await import("./db");
       await deleteProject(input.id);
+      await emitGovernanceEvent({
+        ctx,
+        entityType: "project",
+        entityId: String(input.id),
+        action: "project.delete",
+        webhookEvent: "project.deleted",
+      });
       return { success: true };
     }),
   }),
@@ -453,7 +611,7 @@ export const appRouter = router({
           notes: z.string().optional(),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { createTask, getTaskById } = await import("./db");
         const normalizedInput = {
           ...input,
@@ -463,6 +621,18 @@ export const appRouter = router({
         const id = await createTask(normalizedInput);
         const task = await getTaskById(id);
         if (!task) throw new Error("Failed to retrieve created task");
+        await emitGovernanceEvent({
+          ctx,
+          entityType: "task",
+          entityId: String(task.id),
+          action: "task.create",
+          webhookEvent: "task.created",
+          payload: {
+            projectId: task.projectId,
+            taskId: task.taskId,
+            status: task.status,
+          },
+        });
         return task;
       }),
     update: publicProcedure
@@ -511,6 +681,18 @@ export const appRouter = router({
             before: current,
             after: updated,
             actorName: getActorName(ctx.user),
+          });
+          await emitGovernanceEvent({
+            ctx,
+            entityType: "task",
+            entityId: String(updated.id),
+            action: "task.update",
+            webhookEvent: "task.updated",
+            payload: {
+              projectId: updated.projectId,
+              taskId: updated.taskId,
+              status: updated.status,
+            },
           });
         }
         return { success: true };
@@ -683,6 +865,19 @@ export const appRouter = router({
         }
 
         const dependencyWarnings = await validateTaskDependencies(input.projectId);
+        await emitGovernanceEvent({
+          ctx,
+          entityType: "task",
+          entityId: `bulk:${input.taskIds.join(",")}`,
+          action: "task.bulk_update",
+          webhookEvent: "task.updated",
+          payload: {
+            projectId: input.projectId,
+            updatedCount: tasks.length,
+            appliedDateShiftDays: dateShiftDays,
+            fields: Object.keys(input.patch),
+          },
+        });
 
         return {
           success: true,
@@ -703,9 +898,16 @@ export const appRouter = router({
         const { getProjectCriticalPath } = await import("./db");
         return getProjectCriticalPath(input.projectId);
       }),
-    delete: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    delete: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
       const { deleteTask } = await import("./db");
       await deleteTask(input.id);
+      await emitGovernanceEvent({
+        ctx,
+        entityType: "task",
+        entityId: String(input.id),
+        action: "task.delete",
+        webhookEvent: "task.deleted",
+      });
       return { success: true };
     }),
   }),
@@ -884,6 +1086,249 @@ export const appRouter = router({
       const { getDashboardStats } = await import("./db");
       return getDashboardStats();
     }),
+    portfolioSummary: publicProcedure.query(async () => {
+      const { getPortfolioSummary } = await import("./db");
+      return getPortfolioSummary();
+    }),
+  }),
+
+  // Governance router
+  governance: router({
+    audit: router({
+      list: adminProcedure
+        .input(
+          z
+            .object({
+              limit: z.number().min(1).max(500).optional(),
+              entityType: z
+                .enum(["project", "task", "template", "integration", "webhook", "user_access"])
+                .optional(),
+            })
+            .optional()
+        )
+        .query(async ({ input }) => {
+          const { listAuditLogs } = await import("./db");
+          return listAuditLogs({
+            limit: input?.limit ?? 200,
+            entityType: input?.entityType,
+          });
+        }),
+    }),
+    webhooks: router({
+      list: adminProcedure
+        .input(z.object({ includeInactive: z.boolean().optional() }).optional())
+        .query(async ({ input }) => {
+          const { listWebhookSubscriptions } = await import("./db");
+          const items = await listWebhookSubscriptions({
+            includeInactive: input?.includeInactive ?? true,
+          });
+          return items.map((item) => ({
+            ...item,
+            events: parseStringArray(item.events),
+          }));
+        }),
+      create: adminProcedure
+        .input(
+          z.object({
+            name: z.string().min(1),
+            endpointUrl: z.string().url(),
+            events: z
+              .array(
+                z.enum([
+                  "project.created",
+                  "project.updated",
+                  "project.deleted",
+                  "task.created",
+                  "task.updated",
+                  "task.deleted",
+                  "template.created",
+                  "template.updated",
+                  "template.published",
+                  "template.archived",
+                  "integration.external_event",
+                ])
+              )
+              .min(1),
+            secret: z.string().optional(),
+            isActive: z.boolean().optional(),
+          })
+        )
+        .mutation(async ({ input, ctx }) => {
+          const { createWebhookSubscription } = await import("./db");
+          const created = await createWebhookSubscription({
+            name: input.name.trim(),
+            endpointUrl: input.endpointUrl.trim(),
+            events: input.events as WebhookEventName[],
+            secret: input.secret?.trim() || null,
+            isActive: input.isActive ?? true,
+          });
+          await emitGovernanceEvent({
+            ctx,
+            entityType: "webhook",
+            entityId: String(created.id),
+            action: "webhook.create",
+            payload: {
+              name: created.name,
+              events: input.events,
+              isActive: created.isActive === "Yes",
+            },
+          });
+          return {
+            ...created,
+            events: parseStringArray(created.events),
+          };
+        }),
+      update: adminProcedure
+        .input(
+          z.object({
+            id: z.number(),
+            name: z.string().min(1).optional(),
+            endpointUrl: z.string().url().optional(),
+            events: z
+              .array(
+                z.enum([
+                  "project.created",
+                  "project.updated",
+                  "project.deleted",
+                  "task.created",
+                  "task.updated",
+                  "task.deleted",
+                  "template.created",
+                  "template.updated",
+                  "template.published",
+                  "template.archived",
+                  "integration.external_event",
+                ])
+              )
+              .optional(),
+            secret: z.string().nullable().optional(),
+            isActive: z.boolean().optional(),
+          })
+        )
+        .mutation(async ({ input, ctx }) => {
+          const { updateWebhookSubscription } = await import("./db");
+          const updated = await updateWebhookSubscription(input.id, {
+            name: input.name?.trim(),
+            endpointUrl: input.endpointUrl?.trim(),
+            events: input.events as WebhookEventName[] | undefined,
+            secret: input.secret === undefined ? undefined : input.secret?.trim() ?? null,
+            isActive: input.isActive,
+          });
+          if (!updated) throw new Error("Webhook subscription not found");
+          await emitGovernanceEvent({
+            ctx,
+            entityType: "webhook",
+            entityId: String(updated.id),
+            action: "webhook.update",
+            payload: {
+              changedFields: Object.keys(input).filter((key) => key !== "id"),
+            },
+          });
+          return {
+            ...updated,
+            events: parseStringArray(updated.events),
+          };
+        }),
+      remove: adminProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input, ctx }) => {
+          const { deleteWebhookSubscription } = await import("./db");
+          await deleteWebhookSubscription(input.id);
+          await emitGovernanceEvent({
+            ctx,
+            entityType: "webhook",
+            entityId: String(input.id),
+            action: "webhook.delete",
+          });
+          return { success: true };
+        }),
+    }),
+    access: router({
+      myRole: publicProcedure.query(async ({ ctx }) => {
+        const { resolveGovernanceRole } = await import("./db");
+        const role = await resolveGovernanceRole(ctx.user?.openId);
+        return {
+          role,
+          canEdit: role === "Admin" || role === "Editor",
+          canAdminister: role === "Admin",
+        };
+      }),
+      listPolicies: adminProcedure.query(async () => {
+        const { listUserAccessPolicies, listUsers } = await import("./db");
+        const [policies, users] = await Promise.all([
+          listUserAccessPolicies(500),
+          listUsers(500),
+        ]);
+        return {
+          policies,
+          users,
+        };
+      }),
+      setPolicy: adminProcedure
+        .input(
+          z.object({
+            openId: z.string().min(1),
+            accessRole: z.enum(["Admin", "Editor", "Viewer"]),
+          })
+        )
+        .mutation(async ({ input, ctx }) => {
+          const { upsertUserAccessPolicy, updateUserBaseRole } = await import("./db");
+          const policy = await upsertUserAccessPolicy({
+            openId: input.openId,
+            accessRole: input.accessRole,
+            updatedBy: getActorName(ctx.user),
+          });
+          if (input.accessRole === "Admin") {
+            await updateUserBaseRole(input.openId, "admin");
+          } else {
+            await updateUserBaseRole(input.openId, "user");
+          }
+          await emitGovernanceEvent({
+            ctx,
+            entityType: "user_access",
+            entityId: input.openId,
+            action: "user_access.set_policy",
+            payload: {
+              accessRole: input.accessRole,
+            },
+          });
+          return policy;
+        }),
+    }),
+  }),
+
+  // Integrations router
+  integrations: router({
+    ingestEvent: publicProcedure
+      .input(
+        z.object({
+          token: z.string().optional(),
+          source: z.string().min(1),
+          eventType: z.string().min(1),
+          entityType: z.string().optional(),
+          entityId: z.string().optional(),
+          payload: z.record(z.string(), z.any()).optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        if (ENV.integrationInboundToken && input.token !== ENV.integrationInboundToken) {
+          throw new Error("Invalid integration token");
+        }
+        await emitGovernanceEvent({
+          ctx,
+          entityType: "integration",
+          entityId: input.entityId ?? `${input.source}:${input.eventType}`,
+          action: `integration.ingest.${input.eventType}`,
+          webhookEvent: "integration.external_event",
+          payload: {
+            source: input.source,
+            eventType: input.eventType,
+            entityType: input.entityType ?? null,
+            payload: input.payload ?? {},
+          },
+        });
+        return { success: true };
+      }),
   }),
 
   // Export router

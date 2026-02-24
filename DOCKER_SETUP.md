@@ -96,6 +96,7 @@ VITE_OAUTH_PORTAL_URL=https://auth.manus.im
 VITE_APP_ID=rtc-project-manager
 OWNER_OPEN_ID=admin
 OWNER_NAME=Administrator
+INTEGRATION_INBOUND_TOKEN=
 ```
 
 Database URL used in containers:

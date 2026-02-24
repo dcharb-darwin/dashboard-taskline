@@ -36,6 +36,13 @@
       "when": 1769001600000,
       "tag": "0004_collaboration_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1769018400000,
+      "tag": "0005_portfolio_governance",
+      "breakpoints": true
     }
   ]
 }

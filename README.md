@@ -70,6 +70,13 @@ See **LOCAL_DEPLOYMENT.md** for detailed local setup instructions.
 - **Recent Projects Widget** - Quick access to latest projects
 - **Upcoming Deadlines** - 14-day deadline tracker
 - **Visual Indicators** - Status badges and progress bars
+- **Portfolio Health View** - On-track/risk distribution, throughput trend, and top-risk projects
+
+### Governance & Integrations
+- **Audit Logs** - Lifecycle traceability for project/template/task/integration actions
+- **Access Policies** - Admin/Editor/Viewer governance controls
+- **Webhook Subscriptions** - Outbound lifecycle events for external systems
+- **Inbound Integration API** - Optional token-gated event ingestion
 
 ### Excel Export
 - **Standardized Format** - Three-sheet workbook (Instructions, Dashboard, Project Plan)

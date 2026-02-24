@@ -183,3 +183,61 @@ export const notificationEvents = mysqlTable("notification_events", {
 
 export type NotificationEvent = typeof notificationEvents.$inferSelect;
 export type InsertNotificationEvent = typeof notificationEvents.$inferInsert;
+
+/**
+ * Audit log table - governance record of critical lifecycle actions.
+ */
+export const auditLogs = mysqlTable("audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  entityType: mysqlEnum("entityType", [
+    "project",
+    "task",
+    "template",
+    "integration",
+    "webhook",
+    "user_access",
+  ]).notNull(),
+  entityId: varchar("entityId", { length: 64 }).notNull(),
+  action: varchar("action", { length: 64 }).notNull(),
+  actorOpenId: varchar("actorOpenId", { length: 64 }),
+  actorName: text("actorName").notNull(),
+  details: text("details"), // JSON object with structured audit metadata
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = typeof auditLogs.$inferInsert;
+
+/**
+ * Webhook subscription table - outbound integration endpoint management.
+ */
+export const webhookSubscriptions = mysqlTable("webhook_subscriptions", {
+  id: int("id").autoincrement().primaryKey(),
+  name: text("name").notNull(),
+  endpointUrl: text("endpointUrl").notNull(),
+  events: text("events").notNull(), // JSON array of event names
+  secret: text("secret"),
+  isActive: mysqlEnum("isActive", ["Yes", "No"]).default("Yes").notNull(),
+  lastTriggeredAt: timestamp("lastTriggeredAt"),
+  lastStatus: text("lastStatus"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type WebhookSubscription = typeof webhookSubscriptions.$inferSelect;
+export type InsertWebhookSubscription = typeof webhookSubscriptions.$inferInsert;
+
+/**
+ * User access policy table - role mapping for viewer/editor/admin access control.
+ */
+export const userAccessPolicies = mysqlTable("user_access_policies", {
+  id: int("id").autoincrement().primaryKey(),
+  openId: varchar("openId", { length: 64 }).notNull().unique(),
+  accessRole: mysqlEnum("accessRole", ["Admin", "Editor", "Viewer"]).default("Editor").notNull(),
+  updatedBy: text("updatedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UserAccessPolicy = typeof userAccessPolicies.$inferSelect;
+export type InsertUserAccessPolicy = typeof userAccessPolicies.$inferInsert;
