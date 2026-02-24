@@ -31,6 +31,7 @@ type BuildInput = {
   projects?: ProjectSummary[];
   tasks?: TaskSummary[];
   selectedProject: string;
+  criticalTaskIds?: Set<number>;
 };
 
 const asDate = (value: Date | string | null | undefined): Date | undefined => {
@@ -68,7 +69,12 @@ const taskSortKey = (task: TaskSummary) => {
   return Number.MAX_SAFE_INTEGER;
 };
 
-export function buildGanttTimeline({ projects, tasks, selectedProject }: BuildInput): GanttBuildResult {
+export function buildGanttTimeline({
+  projects,
+  tasks,
+  selectedProject,
+  criticalTaskIds,
+}: BuildInput): GanttBuildResult {
   const timeline: GanttTask[] = [];
   const drilldownMap = new Map<string, { projectId: number; taskId?: number }>();
   let inferredTaskCount = 0;
@@ -150,6 +156,15 @@ export function buildGanttTimeline({ projects, tasks, selectedProject }: BuildIn
         type: "task",
         project: projectRowId,
         dependencies: dependencyIds.length > 0 ? dependencyIds : undefined,
+        styles:
+          criticalTaskIds && criticalTaskIds.has(task.id)
+            ? {
+                backgroundColor: "#dc2626",
+                backgroundSelectedColor: "#b91c1c",
+                progressColor: "#fca5a5",
+                progressSelectedColor: "#f87171",
+              }
+            : undefined,
       });
 
       drilldownMap.set(taskRowId, { projectId: project.id, taskId: task.id });

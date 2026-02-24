@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { normalizeTemplateKey, parseTemplateTasks } from "@/lib/template";
 import { parseDateInputValue } from "@/lib/dateInput";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { 
   ArrowLeft, FolderKanban, Check, ChevronDown, ChevronUp,
   Megaphone, Calendar, Presentation, ClipboardList, FileText, Share2,
@@ -37,7 +37,8 @@ import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 export default function CreateProject() {
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
+  const search = useSearch();
   const { data: templates } = trpc.templates.list.useQuery();
   const [showTaskPreview, setShowTaskPreview] = useState(false);
   
@@ -66,14 +67,13 @@ export default function CreateProject() {
   });
 
   const preselectedTemplateId = useMemo(() => {
-    const searchIndex = location.indexOf("?");
-    if (searchIndex < 0) return null;
-    const searchParams = new URLSearchParams(location.slice(searchIndex));
+    if (!search) return null;
+    const searchParams = new URLSearchParams(search);
     const templateIdParam = searchParams.get("templateId");
     if (!templateIdParam) return null;
     const parsed = Number.parseInt(templateIdParam, 10);
     return Number.isFinite(parsed) ? parsed : null;
-  }, [location]);
+  }, [search]);
 
   useEffect(() => {
     if (!templates || !preselectedTemplateId || formData.templateId) return;

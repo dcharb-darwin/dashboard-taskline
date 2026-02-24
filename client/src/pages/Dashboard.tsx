@@ -197,56 +197,64 @@ export default function Dashboard() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="bg-white">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Projects</CardTitle>
-              <FolderKanban className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats?.totalProjects || 0}</div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {stats?.activeProjects || 0} active
-              </p>
-            </CardContent>
-          </Card>
+          <Link href="/projects">
+            <Card className="cursor-pointer bg-white transition-colors hover:bg-slate-50">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Projects</CardTitle>
+                <FolderKanban className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats?.totalProjects || 0}</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {stats?.activeProjects || 0} active
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
 
-          <Card className="bg-white">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Tasks</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats?.totalTasks || 0}</div>
-              <p className="mt-1 text-xs text-muted-foreground">Across all projects</p>
-            </CardContent>
-          </Card>
+          <Link href="/gantt">
+            <Card className="cursor-pointer bg-white transition-colors hover:bg-slate-50">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Tasks</CardTitle>
+                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats?.totalTasks || 0}</div>
+                <p className="mt-1 text-xs text-muted-foreground">Across all projects</p>
+              </CardContent>
+            </Card>
+          </Link>
 
-          <Card className="bg-white">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Completed Tasks</CardTitle>
-              <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats?.completedTasks || 0}</div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {stats?.totalTasks
-                  ? Math.round((stats.completedTasks / stats.totalTasks) * 100)
-                  : 0}
-                % completion rate
-              </p>
-            </CardContent>
-          </Card>
+          <Link href="/projects?status=Complete">
+            <Card className="cursor-pointer bg-white transition-colors hover:bg-slate-50">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Completed Tasks</CardTitle>
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats?.completedTasks || 0}</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {stats?.totalTasks
+                    ? Math.round((stats.completedTasks / stats.totalTasks) * 100)
+                    : 0}
+                  % completion rate
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
 
-          <Card className="bg-white">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Upcoming Deadlines</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats?.upcomingDeadlines?.length || 0}</div>
-              <p className="mt-1 text-xs text-muted-foreground">Next 14 days</p>
-            </CardContent>
-          </Card>
+          <Link href="/calendar">
+            <Card className="cursor-pointer bg-white transition-colors hover:bg-slate-50">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Upcoming Deadlines</CardTitle>
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats?.upcomingDeadlines?.length || 0}</div>
+                <p className="mt-1 text-xs text-muted-foreground">Next 14 days</p>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
@@ -373,21 +381,45 @@ export default function Dashboard() {
 
           <Card className="bg-white">
             <CardHeader>
-              <CardTitle>Throughput Trend</CardTitle>
-              <CardDescription>Completed tasks by week</CardDescription>
+              <CardTitle>Upcoming Deadlines</CardTitle>
+              <CardDescription>Tasks due in the next 14 days</CardDescription>
             </CardHeader>
             <CardContent>
-              {!portfolio?.throughputByWeek || portfolio.throughputByWeek.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Throughput data appears after tasks are completed.
-                </p>
+              {!stats?.upcomingDeadlines || stats.upcomingDeadlines.length === 0 ? (
+                <div className="py-8 text-center text-muted-foreground">
+                  <Clock className="mx-auto mb-3 h-12 w-12 opacity-20" />
+                  <p>No upcoming deadlines</p>
+                </div>
               ) : (
-                <div className="space-y-2">
-                  {portfolio.throughputByWeek.map((item) => (
-                    <div key={item.weekStart} className="flex items-center justify-between rounded border p-2">
-                      <span className="text-sm">{item.weekStart}</span>
-                      <span className="text-sm font-medium">{item.completedTasks} completed</span>
-                    </div>
+                <div className="space-y-3">
+                  {stats.upcomingDeadlines.map((task) => (
+                    <Link key={task.id} href={`/projects/${task.projectId}?task=${task.id}`}>
+                      <div className="flex cursor-pointer items-start justify-between rounded-lg border p-3 transition-colors hover:bg-slate-50">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">{task.taskDescription}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {task.phase && `${task.phase} • `}
+                            {task.owner || "Unassigned"}
+                          </p>
+                        </div>
+                        <div className="ml-4 text-right">
+                          <p className="text-sm font-medium">
+                            {task.dueDate ? format(new Date(task.dueDate), "MMM d") : "No date"}
+                          </p>
+                          <span
+                            className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                              task.priority === "High"
+                                ? "bg-red-100 text-red-700"
+                                : task.priority === "Medium"
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : "bg-gray-100 text-gray-700"
+                            }`}
+                          >
+                            {task.priority}
+                          </span>
+                        </div>
+                      </div>
+                    </Link>
                   ))}
                 </div>
               )}

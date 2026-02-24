@@ -4,7 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLocation } from "wouter";
 import { buildGanttTimeline } from "@/lib/gantt";
@@ -17,6 +17,20 @@ export default function GanttChart() {
   
   const { data: projects, isLoading: projectsLoading } = trpc.projects.list.useQuery();
   const { data: allTasks, isLoading: tasksLoading } = trpc.tasks.listAll.useQuery();
+  const parsedSelectedProjectId =
+    selectedProject === "all" ? null : Number.parseInt(selectedProject, 10);
+  const selectedProjectId =
+    parsedSelectedProjectId !== null && Number.isFinite(parsedSelectedProjectId)
+      ? parsedSelectedProjectId
+      : null;
+  const { data: criticalPath } = trpc.tasks.criticalPath.useQuery(
+    { projectId: selectedProjectId ?? 0 },
+    { enabled: selectedProjectId !== null },
+  );
+  const criticalTaskIds = useMemo(
+    () => new Set(criticalPath?.taskIds ?? []),
+    [criticalPath?.taskIds],
+  );
 
   const timeline = useMemo(
     () =>
@@ -24,8 +38,9 @@ export default function GanttChart() {
         projects,
         tasks: allTasks,
         selectedProject,
+        criticalTaskIds,
       }),
-    [projects, allTasks, selectedProject],
+    [projects, allTasks, selectedProject, criticalTaskIds],
   );
 
   if (projectsLoading || tasksLoading) {
@@ -90,6 +105,20 @@ export default function GanttChart() {
               </div>
             </div>
           </div>
+          {selectedProjectId !== null && criticalPath && criticalPath.taskCodes.length > 0 ? (
+            <div className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              <div className="flex items-center gap-2 font-medium">
+                <AlertTriangle className="h-4 w-4" />
+                Critical path ({criticalPath.totalDurationDays} days)
+              </div>
+              <p className="mt-1">
+                {criticalPath.taskCodes.join(" -> ")}
+                {criticalPath.blockedByCycle
+                  ? " (dependency cycle detected; showing best-effort path)"
+                  : ""}
+              </p>
+            </div>
+          ) : null}
         </CardHeader>
         <CardContent>
           {timeline.tasks.length > 0 ? (

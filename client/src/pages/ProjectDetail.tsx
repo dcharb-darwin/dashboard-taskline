@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Link, useParams, useLocation } from "wouter";
+import { Link, useParams, useLocation, useSearch } from "wouter";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -122,6 +122,7 @@ const formatCurrency = (value: number | null | undefined) =>
 export default function ProjectDetail() {
   const params = useParams();
   const [, setLocation] = useLocation();
+  const search = useSearch();
   const projectId = parseInt(params.id || "0", 10);
 
   const [editingTask, setEditingTask] = useState<any>(null);
@@ -132,6 +133,14 @@ export default function ProjectDetail() {
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [filterOwner, setFilterOwner] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("dueDate");
+  const highlightedTaskId = useMemo(() => {
+    if (!search) return null;
+    const searchParams = new URLSearchParams(search);
+    const taskParam = searchParams.get("task");
+    if (!taskParam) return null;
+    const parsed = Number.parseInt(taskParam, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }, [search]);
 
   const [selectedTaskIds, setSelectedTaskIds] = useState<number[]>([]);
   const [showBulkDialog, setShowBulkDialog] = useState(false);
@@ -280,6 +289,25 @@ export default function ProjectDetail() {
       window.URL.revokeObjectURL(url);
     },
   });
+
+  useEffect(() => {
+    if (highlightedTaskId === null) return;
+    setFilterStatus("all");
+    setFilterPriority("all");
+    setFilterOwner("all");
+  }, [highlightedTaskId]);
+
+  useEffect(() => {
+    if (highlightedTaskId === null || !tasks || tasks.length === 0) return;
+    const timeout = window.setTimeout(() => {
+      const target = document.getElementById(`task-row-${highlightedTaskId}`);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 120);
+
+    return () => window.clearTimeout(timeout);
+  }, [highlightedTaskId, tasks]);
 
   useEffect(() => {
     if (!tasks || tasks.length === 0) {
@@ -752,7 +780,12 @@ export default function ProjectDetail() {
                         {statusTasks.map((task) => (
                           <div
                             key={task.id}
-                            className="flex items-start justify-between rounded-lg border p-3 transition-colors hover:bg-slate-50"
+                            id={`task-row-${task.id}`}
+                            className={`flex items-start justify-between rounded-lg border p-3 transition-colors hover:bg-slate-50 ${
+                              highlightedTaskId === task.id
+                                ? "ring-2 ring-blue-500 ring-offset-1 bg-blue-50/40"
+                                : ""
+                            }`}
                           >
                             <div className="flex flex-1 gap-3">
                               <input

@@ -4,22 +4,19 @@ import { Button } from "@/components/ui/button";
 import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Link, useLocation } from "wouter";
+import { Link, useSearch } from "wouter";
 import { FolderKanban, Plus, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 
 export default function Projects() {
   const { data: projects, isLoading } = trpc.projects.list.useQuery();
-  const [location] = useLocation();
+  const search = useSearch();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   useEffect(() => {
-    const searchIndex = location.indexOf("?");
-    if (searchIndex < 0) return;
-
-    const searchParams = new URLSearchParams(location.slice(searchIndex));
+    const searchParams = new URLSearchParams(search);
     const statusParam = searchParams.get("status");
     const searchParam = searchParams.get("q");
 
@@ -30,7 +27,7 @@ export default function Projects() {
     if (searchParam !== null) {
       setSearchTerm(searchParam);
     }
-  }, [location]);
+  }, [search]);
 
   const filteredProjects = projects?.filter((project) => {
     const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

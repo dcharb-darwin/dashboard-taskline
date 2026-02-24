@@ -297,6 +297,12 @@ async function seedDatabase() {
   console.log("Starting database seeding...");
 
   try {
+    // Ensure seed is idempotent when run repeatedly.
+    console.log("Clearing existing seedable data...");
+    await db.delete(tasks);
+    await db.delete(projects);
+    await db.delete(templates);
+
     // Insert templates
     console.log("Inserting templates...");
     for (const template of templateData) {
