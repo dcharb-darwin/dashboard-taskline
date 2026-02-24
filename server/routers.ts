@@ -128,6 +128,21 @@ const parseStringArray = (value: string | null | undefined) => {
   }
 };
 
+const parseDependencyCodes = (value: string | null | undefined) =>
+  value
+    ? value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
+
+const shiftDateByDays = (value: Date | null | undefined, days: number) => {
+  if (!value) return value ?? null;
+  const shifted = new Date(value);
+  shifted.setDate(shifted.getDate() + days);
+  return shifted;
+};
+
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -510,22 +525,43 @@ export const appRouter = router({
               owner: z.string().optional(),
               status: z.enum(["Not Started", "In Progress", "Complete", "On Hold"]).optional(),
               priority: z.enum(["High", "Medium", "Low"]).optional(),
+              phase: z.string().optional(),
               startDate: z.date().optional(),
               dueDate: z.date().optional(),
               completionPercent: z.number().min(0).max(100).optional(),
               actualBudget: z.number().optional(),
+              clearOwner: z.boolean().optional(),
+              clearDates: z.boolean().optional(),
+              dateShiftDays: z.number().int().min(-3650).max(3650).optional(),
+              enforceDependencyReadiness: z.boolean().optional(),
             })
-            .refine((value) => Object.keys(value).length > 0, {
+            .refine((value) => {
+              const hasDirectField =
+                value.owner !== undefined ||
+                value.status !== undefined ||
+                value.priority !== undefined ||
+                value.phase !== undefined ||
+                value.startDate !== undefined ||
+                value.dueDate !== undefined ||
+                value.completionPercent !== undefined ||
+                value.actualBudget !== undefined;
+              const hasRules =
+                value.clearOwner === true ||
+                value.clearDates === true ||
+                (value.dateShiftDays ?? 0) !== 0;
+              return hasDirectField || hasRules;
+            }, {
               message: "Patch must include at least one field.",
             }),
         })
       )
       .mutation(async ({ input, ctx }) => {
         const {
-          bulkUpdateTasks,
           getTaskById,
           getTasksByIds,
+          getTasksByProjectId,
           recordTaskChangeActivityAndNotifications,
+          updateTask,
           validateTaskDependencies,
         } = await import("./db");
         const tasks = await getTasksByIds(input.taskIds);
@@ -539,17 +575,103 @@ export const appRouter = router({
           }
         }
 
+        const clearOwner = input.patch.clearOwner === true;
+        const clearDates = input.patch.clearDates === true;
+        const dateShiftDays = input.patch.dateShiftDays ?? 0;
+        const enforceDependencyReadiness =
+          input.patch.enforceDependencyReadiness ?? true;
+
+        const predictedStatusByTaskId = new Map<number, string>();
         for (const task of tasks) {
           const normalized = applyTaskWorkflowGuardrails(task, {
             status: input.patch.status,
             completionPercent: input.patch.completionPercent,
           });
-          await bulkUpdateTasks([task.id], {
-            ...input.patch,
+          predictedStatusByTaskId.set(task.id, normalized.status ?? task.status);
+        }
+
+        const projectTasks = await getTasksByProjectId(input.projectId);
+        const projectTaskByCode = new Map(
+          projectTasks.map((task) => [task.taskId, task])
+        );
+
+        for (const task of tasks) {
+          const normalized = applyTaskWorkflowGuardrails(task, {
+            status: input.patch.status,
+            completionPercent: input.patch.completionPercent,
+          });
+
+          const targetStatus = predictedStatusByTaskId.get(task.id) ?? task.status;
+          if (enforceDependencyReadiness && targetStatus === "Complete") {
+            const unresolvedDependencies = parseDependencyCodes(task.dependency).filter(
+              (dependencyCode) => {
+                const dependencyTask = projectTaskByCode.get(dependencyCode);
+                if (!dependencyTask) return false;
+                const predictedDependencyStatus =
+                  predictedStatusByTaskId.get(dependencyTask.id) ??
+                  dependencyTask.status;
+                return predictedDependencyStatus !== "Complete";
+              }
+            );
+            if (unresolvedDependencies.length > 0) {
+              throw new Error(
+                `Cannot set ${task.taskId} to Complete while dependencies are not complete: ${unresolvedDependencies.join(", ")}.`
+              );
+            }
+          }
+
+          let nextStartDate = clearDates
+            ? null
+            : input.patch.startDate !== undefined
+            ? input.patch.startDate
+            : task.startDate;
+          let nextDueDate = clearDates
+            ? null
+            : input.patch.dueDate !== undefined
+            ? input.patch.dueDate
+            : task.dueDate;
+
+          if (!clearDates && dateShiftDays !== 0) {
+            nextStartDate = shiftDateByDays(nextStartDate, dateShiftDays);
+            nextDueDate = shiftDateByDays(nextDueDate, dateShiftDays);
+          }
+
+          if (
+            nextStartDate &&
+            nextDueDate &&
+            nextStartDate.getTime() > nextDueDate.getTime()
+          ) {
+            throw new Error(
+              `Invalid date range for ${task.taskId}: start date cannot be after due date.`
+            );
+          }
+
+          const updatePayload: Record<string, unknown> = {
             status: normalized.status ?? input.patch.status,
             completionPercent:
               normalized.completionPercent ?? input.patch.completionPercent,
-          });
+            priority: input.patch.priority,
+            actualBudget: input.patch.actualBudget,
+          };
+
+          if (input.patch.phase !== undefined) {
+            updatePayload.phase = input.patch.phase.trim() || null;
+          }
+
+          if (clearOwner) {
+            updatePayload.owner = null;
+          } else if (input.patch.owner !== undefined) {
+            updatePayload.owner = input.patch.owner.trim() || null;
+          }
+
+          if (clearDates || input.patch.startDate !== undefined || dateShiftDays !== 0) {
+            updatePayload.startDate = nextStartDate ?? null;
+          }
+          if (clearDates || input.patch.dueDate !== undefined || dateShiftDays !== 0) {
+            updatePayload.dueDate = nextDueDate ?? null;
+          }
+
+          await updateTask(task.id, updatePayload as any);
           const updated = await getTaskById(task.id);
           if (updated) {
             await recordTaskChangeActivityAndNotifications({
@@ -565,6 +687,7 @@ export const appRouter = router({
         return {
           success: true,
           updatedCount: tasks.length,
+          appliedDateShiftDays: dateShiftDays,
           dependencyWarnings,
         };
       }),
@@ -573,6 +696,12 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const { validateTaskDependencies } = await import("./db");
         return validateTaskDependencies(input.projectId);
+      }),
+    criticalPath: publicProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ input }) => {
+        const { getProjectCriticalPath } = await import("./db");
+        return getProjectCriticalPath(input.projectId);
       }),
     delete: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
       const { deleteTask } = await import("./db");

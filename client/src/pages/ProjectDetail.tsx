@@ -139,10 +139,15 @@ export default function ProjectDetail() {
     owner: "",
     status: "unchanged" as BulkStatus,
     priority: "unchanged" as BulkPriority,
+    phase: "",
     startDate: "",
     dueDate: "",
     completionPercent: "",
     actualBudget: "",
+    dateShiftDays: "",
+    clearOwner: false,
+    clearDates: false,
+    enforceDependencyReadiness: true,
   });
   const [dependencyWarnings, setDependencyWarnings] = useState<DependencyIssue[]>([]);
   const [commentContent, setCommentContent] = useState("");
@@ -231,10 +236,15 @@ export default function ProjectDetail() {
         owner: "",
         status: "unchanged",
         priority: "unchanged",
+        phase: "",
         startDate: "",
         dueDate: "",
         completionPercent: "",
         actualBudget: "",
+        dateShiftDays: "",
+        clearOwner: false,
+        clearDates: false,
+        enforceDependencyReadiness: true,
       });
     },
     onError: (error) => {
@@ -418,8 +428,13 @@ export default function ProjectDetail() {
     if (bulkPatch.owner.trim()) patch.owner = bulkPatch.owner.trim();
     if (bulkPatch.status !== "unchanged") patch.status = bulkPatch.status;
     if (bulkPatch.priority !== "unchanged") patch.priority = bulkPatch.priority;
-    if (bulkPatch.startDate) patch.startDate = new Date(bulkPatch.startDate);
-    if (bulkPatch.dueDate) patch.dueDate = new Date(bulkPatch.dueDate);
+    if (bulkPatch.phase.trim()) patch.phase = bulkPatch.phase.trim();
+    if (!bulkPatch.clearDates && bulkPatch.startDate) {
+      patch.startDate = new Date(bulkPatch.startDate);
+    }
+    if (!bulkPatch.clearDates && bulkPatch.dueDate) {
+      patch.dueDate = new Date(bulkPatch.dueDate);
+    }
     if (bulkPatch.completionPercent !== "") {
       patch.completionPercent = Math.max(
         0,
@@ -431,11 +446,21 @@ export default function ProjectDetail() {
         (Number.parseFloat(bulkPatch.actualBudget) || 0) * 100
       );
     }
+    if (bulkPatch.dateShiftDays !== "") {
+      const shift = Number.parseInt(bulkPatch.dateShiftDays, 10) || 0;
+      if (shift !== 0) {
+        patch.dateShiftDays = shift;
+      }
+    }
+    if (bulkPatch.clearOwner) patch.clearOwner = true;
+    if (bulkPatch.clearDates) patch.clearDates = true;
 
     if (Object.keys(patch).length === 0) {
       toast.error("Provide at least one bulk update value");
       return;
     }
+
+    patch.enforceDependencyReadiness = bulkPatch.enforceDependencyReadiness;
 
     bulkUpdateTasks.mutate({
       projectId,
@@ -1163,7 +1188,7 @@ export default function ProjectDetail() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="bulk-priority">Priority</Label>
                 <Select
@@ -1187,6 +1212,17 @@ export default function ProjectDetail() {
                 </Select>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="bulk-phase">Phase</Label>
+                <Input
+                  id="bulk-phase"
+                  value={bulkPatch.phase}
+                  onChange={(event) =>
+                    setBulkPatch((prev) => ({ ...prev, phase: event.target.value }))
+                  }
+                  placeholder="Leave blank to keep"
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="bulk-completion">Completion %</Label>
                 <Input
                   id="bulk-completion"
@@ -1204,12 +1240,13 @@ export default function ProjectDetail() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="bulk-start-date">Start Date</Label>
                 <Input
                   id="bulk-start-date"
                   type="date"
+                  disabled={bulkPatch.clearDates}
                   value={bulkPatch.startDate}
                   onChange={(event) =>
                     setBulkPatch((prev) => ({ ...prev, startDate: event.target.value }))
@@ -1221,10 +1258,27 @@ export default function ProjectDetail() {
                 <Input
                   id="bulk-due-date"
                   type="date"
+                  disabled={bulkPatch.clearDates}
                   value={bulkPatch.dueDate}
                   onChange={(event) =>
                     setBulkPatch((prev) => ({ ...prev, dueDate: event.target.value }))
                   }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bulk-shift-days">Shift Dates (days)</Label>
+                <Input
+                  id="bulk-shift-days"
+                  type="number"
+                  step="1"
+                  value={bulkPatch.dateShiftDays}
+                  onChange={(event) =>
+                    setBulkPatch((prev) => ({
+                      ...prev,
+                      dateShiftDays: event.target.value,
+                    }))
+                  }
+                  placeholder="e.g. 3 or -2"
                 />
               </div>
               <div className="space-y-2">
@@ -1242,6 +1296,39 @@ export default function ProjectDetail() {
                   }
                 />
               </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
+                Clear owner
+                <Switch
+                  checked={bulkPatch.clearOwner}
+                  onCheckedChange={(checked) =>
+                    setBulkPatch((prev) => ({ ...prev, clearOwner: checked }))
+                  }
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
+                Clear dates
+                <Switch
+                  checked={bulkPatch.clearDates}
+                  onCheckedChange={(checked) =>
+                    setBulkPatch((prev) => ({ ...prev, clearDates: checked }))
+                  }
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
+                Enforce dependency readiness
+                <Switch
+                  checked={bulkPatch.enforceDependencyReadiness}
+                  onCheckedChange={(checked) =>
+                    setBulkPatch((prev) => ({
+                      ...prev,
+                      enforceDependencyReadiness: checked,
+                    }))
+                  }
+                />
+              </label>
             </div>
           </div>
 

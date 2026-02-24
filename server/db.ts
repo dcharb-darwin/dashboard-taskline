@@ -48,6 +48,14 @@ export type DependencyValidationIssue = {
   message: string;
 };
 
+export type CriticalPathSummary = {
+  projectId: number;
+  taskIds: number[];
+  taskCodes: string[];
+  totalDurationDays: number;
+  blockedByCycle: boolean;
+};
+
 type DeliveryChannel = "in_app" | "email" | "slack" | "webhook";
 
 type NotificationPreferencesPatch = Partial<
@@ -1104,6 +1112,108 @@ export async function validateTaskDependencies(projectId: number) {
   return buildDependencyIssues(tasks);
 }
 
+const estimateTaskDurationDays = (task: Task) => {
+  if (task.durationDays && task.durationDays > 0) return task.durationDays;
+  if (task.startDate && task.dueDate) {
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const diff = Math.ceil(
+      (task.dueDate.getTime() - task.startDate.getTime()) / msPerDay
+    );
+    return Math.max(1, diff);
+  }
+  return 1;
+};
+
+export async function getProjectCriticalPath(
+  projectId: number
+): Promise<CriticalPathSummary> {
+  const tasks = await getTasksByProjectId(projectId);
+  if (tasks.length === 0) {
+    return {
+      projectId,
+      taskIds: [],
+      taskCodes: [],
+      totalDurationDays: 0,
+      blockedByCycle: false,
+    };
+  }
+
+  const taskByCode = new Map(tasks.map((task) => [task.taskId, task]));
+  const dependencyMap = new Map<string, string[]>();
+  for (const task of tasks) {
+    const dependencies = parseDependencies(task.dependency).filter((dependencyCode) =>
+      taskByCode.has(dependencyCode)
+    );
+    dependencyMap.set(task.taskId, dependencies);
+  }
+
+  const memo = new Map<string, { duration: number; path: string[] }>();
+  const visiting = new Set<string>();
+  let blockedByCycle = false;
+
+  const longestEndingAt = (taskCode: string): { duration: number; path: string[] } => {
+    const memoized = memo.get(taskCode);
+    if (memoized) return memoized;
+
+    if (visiting.has(taskCode)) {
+      blockedByCycle = true;
+      const cycleTask = taskByCode.get(taskCode);
+      const fallback = {
+        duration: cycleTask ? estimateTaskDurationDays(cycleTask) : 1,
+        path: [taskCode],
+      };
+      memo.set(taskCode, fallback);
+      return fallback;
+    }
+
+    const task = taskByCode.get(taskCode);
+    if (!task) {
+      const fallback = { duration: 1, path: [taskCode] };
+      memo.set(taskCode, fallback);
+      return fallback;
+    }
+
+    visiting.add(taskCode);
+    let bestDependencyDuration = 0;
+    let bestDependencyPath: string[] = [];
+
+    for (const dependencyCode of dependencyMap.get(taskCode) ?? []) {
+      const dependencyCandidate = longestEndingAt(dependencyCode);
+      if (dependencyCandidate.duration > bestDependencyDuration) {
+        bestDependencyDuration = dependencyCandidate.duration;
+        bestDependencyPath = dependencyCandidate.path;
+      }
+    }
+    visiting.delete(taskCode);
+
+    const duration = estimateTaskDurationDays(task) + bestDependencyDuration;
+    const result = {
+      duration,
+      path: [...bestDependencyPath, taskCode],
+    };
+    memo.set(taskCode, result);
+    return result;
+  };
+
+  let best = { duration: 0, path: [] as string[] };
+  for (const task of tasks) {
+    const candidate = longestEndingAt(task.taskId);
+    if (candidate.duration > best.duration) {
+      best = candidate;
+    }
+  }
+
+  return {
+    projectId,
+    taskIds: best.path
+      .map((taskCode) => taskByCode.get(taskCode)?.id)
+      .filter((id): id is number => typeof id === "number"),
+    taskCodes: best.path,
+    totalDurationDays: best.duration,
+    blockedByCycle,
+  };
+}
+
 export async function createTask(data: InsertTask) {
   const db = await getDb();
   if (!db) {
@@ -1158,22 +1268,25 @@ export async function updateTask(id: number, data: Partial<InsertTask>) {
   if (!db) {
     const index = memoryState.tasks.findIndex((task) => task.id === id);
     if (index < 0) return;
+    const current = memoryState.tasks[index]!;
+    const pick = <T>(value: T | undefined, fallback: T) =>
+      value === undefined ? fallback : value;
     memoryState.tasks[index] = {
-      ...memoryState.tasks[index],
+      ...current,
       ...data,
       updatedAt: new Date(),
-      startDate: data.startDate ?? memoryState.tasks[index]!.startDate,
-      dueDate: data.dueDate ?? memoryState.tasks[index]!.dueDate,
-      durationDays: data.durationDays ?? memoryState.tasks[index]!.durationDays,
-      dependency: data.dependency ?? memoryState.tasks[index]!.dependency,
-      owner: data.owner ?? memoryState.tasks[index]!.owner,
-      phase: data.phase ?? memoryState.tasks[index]!.phase,
-      budget: data.budget ?? memoryState.tasks[index]!.budget,
-      actualBudget: data.actualBudget ?? memoryState.tasks[index]!.actualBudget,
-      approver: data.approver ?? memoryState.tasks[index]!.approver,
-      deliverableType: data.deliverableType ?? memoryState.tasks[index]!.deliverableType,
-      notes: data.notes ?? memoryState.tasks[index]!.notes,
-      completionPercent: data.completionPercent ?? memoryState.tasks[index]!.completionPercent,
+      startDate: pick(data.startDate, current.startDate),
+      dueDate: pick(data.dueDate, current.dueDate),
+      durationDays: pick(data.durationDays, current.durationDays),
+      dependency: pick(data.dependency, current.dependency),
+      owner: pick(data.owner, current.owner),
+      phase: pick(data.phase, current.phase),
+      budget: pick(data.budget, current.budget),
+      actualBudget: pick(data.actualBudget, current.actualBudget),
+      approver: pick(data.approver, current.approver),
+      deliverableType: pick(data.deliverableType, current.deliverableType),
+      notes: pick(data.notes, current.notes),
+      completionPercent: pick(data.completionPercent, current.completionPercent),
     };
     return;
   }
