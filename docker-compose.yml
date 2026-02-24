@@ -37,7 +37,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: tools
-    command: sh -lc "pnpm exec tsx seed-database.mjs"
+    command: sh -lc "pnpm db:seed"
     container_name: rtc-project-manager-seed
     restart: "no"
     profiles:

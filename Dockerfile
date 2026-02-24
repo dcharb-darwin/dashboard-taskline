@@ -9,6 +9,7 @@ WORKDIR /app
 
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
+COPY patches ./patches
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
@@ -36,14 +37,18 @@ WORKDIR /app
 
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
+COPY patches ./patches
 
-# Install production dependencies only
-RUN pnpm install --prod --frozen-lockfile
+# Install full dependencies: runtime server imports vite in this build
+RUN pnpm install --frozen-lockfile
 
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/shared ./shared
+COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
+COPY --from=builder /app/seed-database.mjs ./seed-database.mjs
+COPY --from=builder /app/seed-database-old.mjs ./seed-database-old.mjs
 
 # Expose port
 EXPOSE 3000
