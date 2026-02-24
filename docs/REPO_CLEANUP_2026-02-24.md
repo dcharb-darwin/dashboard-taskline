@@ -55,9 +55,9 @@ Preflight and quality gates were run before cleanup:
 - Added `npm run verify` script in `package.json`.
 - Rewrote setup docs for consistency:
   - `README.md`
-  - `QUICKSTART.md`
-  - `DOCKER_SETUP.md`
-  - `LOCAL_DEPLOYMENT.md`
+  - `docs/setup/QUICKSTART.md`
+  - `docs/setup/DOCKER_SETUP.md`
+  - `docs/setup/LOCAL_DEPLOYMENT.md`
 
 ## Follow-Up Backlog
 

@@ -29,9 +29,9 @@ pnpm dev
 ```
 
 See detailed guides:
-- `QUICKSTART.md`
-- `DOCKER_SETUP.md`
-- `LOCAL_DEPLOYMENT.md`
+- `docs/setup/QUICKSTART.md`
+- `docs/setup/DOCKER_SETUP.md`
+- `docs/setup/LOCAL_DEPLOYMENT.md`
 
 ## Development Commands
 - `pnpm dev`: run local dev server

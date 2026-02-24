@@ -39,7 +39,7 @@ Before making edits, confirm:
 
 ## Documentation Standards
 - Update `README.md` for any setup or workflow changes.
-- Keep `QUICKSTART.md`, `DOCKER_SETUP.md`, and `LOCAL_DEPLOYMENT.md` aligned with actual commands.
+- Keep `docs/setup/QUICKSTART.md`, `docs/setup/DOCKER_SETUP.md`, and `docs/setup/LOCAL_DEPLOYMENT.md` aligned with actual commands.
 - Record non-trivial process updates in `CHANGELOG.md`.
 
 ## Testing Guidance
