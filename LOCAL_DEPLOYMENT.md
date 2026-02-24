@@ -102,7 +102,7 @@ This command will:
 Populate the database with 14 project templates and sample projects:
 
 ```bash
-pnpm exec tsx seed-database.mjs
+pnpm db:seed
 ```
 
 This will create:

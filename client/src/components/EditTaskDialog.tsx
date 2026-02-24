@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { parseDateInputValue, toDateInputValue } from "@/lib/dateInput";
 
 interface Task {
   id: number;
@@ -23,7 +24,6 @@ interface Task {
   priority: "High" | "Medium" | "Low";
   phase: string | null;
   budget: number | null;
-  actualBudget: number | null;
   approvalRequired: "Yes" | "No";
   approver: string | null;
   deliverableType: string | null;
@@ -38,25 +38,30 @@ interface EditTaskDialogProps {
   onSuccess: () => void;
 }
 
+const buildFormData = (task: Task) => ({
+  taskDescription: task.taskDescription,
+  startDate: toDateInputValue(task.startDate),
+  dueDate: toDateInputValue(task.dueDate),
+  durationDays: task.durationDays?.toString() || "",
+  dependency: task.dependency || "",
+  owner: task.owner || "",
+  status: task.status,
+  priority: task.priority,
+  phase: task.phase || "",
+  budget: task.budget ? (task.budget / 100).toString() : "",
+  approvalRequired: task.approvalRequired,
+  approver: task.approver || "",
+  deliverableType: task.deliverableType || "",
+  completionPercent: task.completionPercent.toString(),
+  notes: task.notes || "",
+});
+
 export function EditTaskDialog({ task, open, onOpenChange, onSuccess }: EditTaskDialogProps) {
-  const [formData, setFormData] = useState({
-    taskDescription: task.taskDescription,
-    startDate: task.startDate ? new Date(task.startDate).toISOString().split("T")[0] : "",
-    dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split("T")[0] : "",
-    durationDays: task.durationDays?.toString() || "",
-    dependency: task.dependency || "",
-    owner: task.owner || "",
-    status: task.status,
-    priority: task.priority,
-    phase: task.phase || "",
-    budget: task.budget ? (task.budget / 100).toString() : "",
-    actualBudget: task.actualBudget ? (task.actualBudget / 100).toString() : "",
-    approvalRequired: task.approvalRequired,
-    approver: task.approver || "",
-    deliverableType: task.deliverableType || "",
-    completionPercent: task.completionPercent.toString(),
-    notes: task.notes || "",
-  });
+  const [formData, setFormData] = useState(() => buildFormData(task));
+
+  useEffect(() => {
+    setFormData(buildFormData(task));
+  }, [task]);
 
   const updateTask = trpc.tasks.update.useMutation({
     onSuccess: () => {
@@ -71,27 +76,70 @@ export function EditTaskDialog({ task, open, onOpenChange, onSuccess }: EditTask
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+    const taskDescription = formData.taskDescription.trim();
+    if (!taskDescription) {
+      toast.error("Task description is required");
+      return;
+    }
+
+    const startDate = parseDateInputValue(formData.startDate);
+    const dueDate = parseDateInputValue(formData.dueDate);
+    if (formData.startDate && !startDate) {
+      toast.error("Start date is invalid");
+      return;
+    }
+    if (formData.dueDate && !dueDate) {
+      toast.error("Due date is invalid");
+      return;
+    }
+    if (startDate && dueDate && dueDate.getTime() < startDate.getTime()) {
+      toast.error("Due date cannot be earlier than start date");
+      return;
+    }
+
+    const durationRaw = formData.durationDays.trim();
+    const durationDays =
+      durationRaw.length > 0 ? Number.parseInt(durationRaw, 10) : undefined;
+    if (durationRaw.length > 0) {
+      if (!Number.isInteger(durationDays) || (durationDays ?? -1) < 0) {
+        toast.error("Duration must be a non-negative whole number");
+        return;
+      }
+    }
+
+    const completionRaw = formData.completionPercent.trim();
+    const completionPercent = Number.parseInt(completionRaw, 10);
+    if (!Number.isInteger(completionPercent) || completionPercent < 0 || completionPercent > 100) {
+      toast.error("Completion percent must be between 0 and 100");
+      return;
+    }
+
+    const budgetRaw = formData.budget.trim();
+    const parsedBudget = budgetRaw.length > 0 ? Number.parseFloat(budgetRaw) : undefined;
+    if (budgetRaw.length > 0) {
+      if (!Number.isFinite(parsedBudget) || (parsedBudget ?? -1) < 0) {
+        toast.error("Budget must be a non-negative number");
+        return;
+      }
+    }
+
     updateTask.mutate({
       id: task.id,
-      taskDescription: formData.taskDescription,
-      startDate: formData.startDate ? new Date(formData.startDate) : undefined,
-      dueDate: formData.dueDate ? new Date(formData.dueDate) : undefined,
-      durationDays: formData.durationDays ? parseInt(formData.durationDays) : undefined,
-      dependency: formData.dependency || undefined,
-      owner: formData.owner || undefined,
+      taskDescription,
+      startDate,
+      dueDate,
+      durationDays,
+      dependency: formData.dependency.trim(),
+      owner: formData.owner.trim(),
       status: formData.status,
       priority: formData.priority,
-      phase: formData.phase || undefined,
-      budget: formData.budget ? Math.round(parseFloat(formData.budget) * 100) : undefined,
-      actualBudget: formData.actualBudget
-        ? Math.round(parseFloat(formData.actualBudget) * 100)
-        : undefined,
+      phase: formData.phase.trim(),
+      budget: parsedBudget === undefined ? undefined : Math.round(parsedBudget * 100),
       approvalRequired: formData.approvalRequired,
-      approver: formData.approver || undefined,
-      deliverableType: formData.deliverableType || undefined,
-      completionPercent: parseInt(formData.completionPercent),
-      notes: formData.notes || undefined,
+      approver: formData.approver.trim(),
+      deliverableType: formData.deliverableType.trim(),
+      completionPercent,
+      notes: formData.notes.trim(),
     });
   };
 
@@ -232,7 +280,7 @@ export function EditTaskDialog({ task, open, onOpenChange, onSuccess }: EditTask
             </div>
 
             {/* Budget and Deliverable */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="budget">Budget ($)</Label>
                 <Input
@@ -241,19 +289,6 @@ export function EditTaskDialog({ task, open, onOpenChange, onSuccess }: EditTask
                   step="0.01"
                   value={formData.budget}
                   onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
-                  placeholder="0.00"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="actualBudget">Actual ($)</Label>
-                <Input
-                  id="actualBudget"
-                  type="number"
-                  step="0.01"
-                  value={formData.actualBudget}
-                  onChange={(e) =>
-                    setFormData({ ...formData, actualBudget: e.target.value })
-                  }
                   placeholder="0.00"
                 />
               </div>

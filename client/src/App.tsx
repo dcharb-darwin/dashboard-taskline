@@ -9,7 +9,6 @@ import Projects from "./pages/Projects";
 import ProjectDetail from "./pages/ProjectDetail";
 import CreateProject from "./pages/CreateProject";
 import Templates from "./pages/Templates";
-import TemplateManager from "./pages/TemplateManager";
 import Calendar from "./pages/Calendar";
 import GanttChart from "./pages/GanttChart";
 
@@ -21,7 +20,6 @@ function Router() {
       <Route path="/projects/new" component={CreateProject} />
       <Route path="/projects/:id" component={ProjectDetail} />
       <Route path="/templates" component={Templates} />
-      <Route path="/templates/manage" component={TemplateManager} />
       <Route path="/calendar" component={Calendar} />
       <Route path="/gantt" component={GanttChart} />
       <Route path={"/404"} component={NotFound} />

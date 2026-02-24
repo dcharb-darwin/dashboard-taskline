@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { normalizeTemplateKey, parseTemplateTasks } from "@/lib/template";
+import { parseDateInputValue } from "@/lib/dateInput";
 import { Link, useLocation } from "wouter";
 import { 
   ArrowLeft, FolderKanban, Check, ChevronDown, ChevronUp,
@@ -31,12 +32,12 @@ const templateIcons: Record<string, React.ElementType> = {
   "other_custom": FolderOpen,
   "generic_project": FolderKanban,
 };
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 export default function CreateProject() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { data: templates } = trpc.templates.list.useQuery();
   const [showTaskPreview, setShowTaskPreview] = useState(false);
   
@@ -49,7 +50,6 @@ export default function CreateProject() {
     startDate: "",
     targetCompletionDate: "",
     budget: "",
-    actualBudget: "",
     status: "Planning" as const,
   });
 
@@ -65,10 +65,34 @@ export default function CreateProject() {
     },
   });
 
+  const preselectedTemplateId = useMemo(() => {
+    const searchIndex = location.indexOf("?");
+    if (searchIndex < 0) return null;
+    const searchParams = new URLSearchParams(location.slice(searchIndex));
+    const templateIdParam = searchParams.get("templateId");
+    if (!templateIdParam) return null;
+    const parsed = Number.parseInt(templateIdParam, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }, [location]);
+
+  useEffect(() => {
+    if (!templates || !preselectedTemplateId || formData.templateId) return;
+    const preselectedTemplate = templates.find((template) => template.id === preselectedTemplateId);
+    if (!preselectedTemplate) return;
+
+    setFormData((previous) => ({
+      ...previous,
+      templateId: preselectedTemplate.id.toString(),
+      templateType: preselectedTemplate.name,
+    }));
+    setShowTaskPreview(true);
+  }, [templates, preselectedTemplateId, formData.templateId]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.name || !formData.templateId) {
+
+    const projectName = formData.name.trim();
+    if (!projectName || !formData.templateId) {
       toast.error("Please fill in required fields");
       return;
     }
@@ -79,18 +103,43 @@ export default function CreateProject() {
       return;
     }
 
+    const startDate = parseDateInputValue(formData.startDate);
+    const targetCompletionDate = parseDateInputValue(formData.targetCompletionDate);
+    if (formData.startDate && !startDate) {
+      toast.error("Start date is invalid");
+      return;
+    }
+    if (formData.targetCompletionDate && !targetCompletionDate) {
+      toast.error("Target completion date is invalid");
+      return;
+    }
+    if (
+      startDate &&
+      targetCompletionDate &&
+      targetCompletionDate.getTime() < startDate.getTime()
+    ) {
+      toast.error("Target completion date cannot be earlier than start date");
+      return;
+    }
+
+    const budgetRaw = formData.budget.trim();
+    const parsedBudget = budgetRaw.length > 0 ? Number.parseFloat(budgetRaw) : undefined;
+    if (budgetRaw.length > 0) {
+      if (!Number.isFinite(parsedBudget) || (parsedBudget ?? -1) < 0) {
+        toast.error("Budget must be a non-negative number");
+        return;
+      }
+    }
+
     createProject.mutate({
-      name: formData.name,
-      description: formData.description || undefined,
+      name: projectName,
+      description: formData.description.trim() || undefined,
       templateId,
       templateType: formData.templateType,
-      projectManager: formData.projectManager || undefined,
-      startDate: formData.startDate ? new Date(formData.startDate) : undefined,
-      targetCompletionDate: formData.targetCompletionDate ? new Date(formData.targetCompletionDate) : undefined,
-      budget: formData.budget ? Math.round(parseFloat(formData.budget) * 100) : undefined,
-      actualBudget: formData.actualBudget
-        ? Math.round(parseFloat(formData.actualBudget) * 100)
-        : undefined,
+      projectManager: formData.projectManager.trim() || undefined,
+      startDate,
+      targetCompletionDate,
+      budget: parsedBudget === undefined ? undefined : Math.round(parsedBudget * 100),
       status: formData.status,
     });
   };
@@ -132,9 +181,7 @@ export default function CreateProject() {
                 const templateTasks = parseTemplateTasks(template.sampleTasks);
                 const taskCount = templateTasks.length;
                 const isSelected = formData.templateId === template.id.toString();
-                const iconKey = normalizeTemplateKey(
-                  template.templateGroupKey || template.templateKey || template.name
-                );
+                const iconKey = normalizeTemplateKey(template.templateKey || template.name);
                 
                 return (
                   <Card
@@ -167,8 +214,7 @@ export default function CreateProject() {
                           <div className="flex-1">
                             <CardTitle className="text-lg">{template.name}</CardTitle>
                             <CardDescription className="mt-1">
-                              v{template.version} • {taskCount} tasks •{" "}
-                              {template.description || "Standard project template"}
+                              {taskCount} tasks • {template.description || "Standard project template"}
                             </CardDescription>
                           </div>
                         </div>
@@ -297,31 +343,16 @@ export default function CreateProject() {
                     </div>
 
                     {/* Budget */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="budget">Planned Budget ($)</Label>
-                        <Input
-                          id="budget"
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={formData.budget}
-                          onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="actualBudget">Actual Spend ($)</Label>
-                        <Input
-                          id="actualBudget"
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={formData.actualBudget}
-                          onChange={(e) =>
-                            setFormData({ ...formData, actualBudget: e.target.value })
-                          }
-                        />
-                      </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="budget">Budget ($)</Label>
+                      <Input
+                        id="budget"
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={formData.budget}
+                        onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                      />
                     </div>
 
                     {/* Status */}

@@ -67,7 +67,7 @@ This command will:
 
 ```bash
 docker-compose exec app pnpm db:push
-docker-compose exec app pnpm exec tsx seed-database.mjs
+docker-compose exec app pnpm db:seed
 ```
 
 #### Step 5: Access the Application
@@ -153,7 +153,7 @@ This creates all necessary tables in your database.
 #### Step 6: Seed Sample Data
 
 ```bash
-pnpm exec tsx seed-database.mjs
+pnpm db:seed
 ```
 
 This populates the database with:
@@ -235,7 +235,7 @@ npm install -g pnpm
 ```bash
 # Reset database
 pnpm db:push
-pnpm exec tsx seed-database.mjs
+pnpm db:seed
 ```
 
 ---

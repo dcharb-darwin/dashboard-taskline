@@ -214,4 +214,132 @@ describe("Template Integration", () => {
       expect(tasks.length).toBe(expectedTaskCount);
     }
   });
+
+  it("should persist template task updates and apply them to new projects", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const templateBefore = await caller.templates.getById({ id: marketingTemplateId });
+    expect(templateBefore).toBeDefined();
+
+    const originalTasks = templateBefore ? JSON.parse(templateBefore.sampleTasks) : [];
+    const normalizeTask = (task: any, index: number) => ({
+      taskId:
+        typeof task.taskId === "string" && task.taskId.trim()
+          ? task.taskId
+          : `T${String(index + 1).padStart(3, "0")}`,
+      taskDescription: String(task.taskDescription ?? task.description ?? "").trim(),
+      phase: typeof task.phase === "string" && task.phase.trim() ? task.phase : undefined,
+      priority:
+        task.priority === "High" || task.priority === "Medium" || task.priority === "Low"
+          ? task.priority
+          : "Medium",
+      owner: typeof task.owner === "string" && task.owner.trim() ? task.owner : undefined,
+      dependency:
+        typeof task.dependency === "string" && task.dependency.trim() ? task.dependency : undefined,
+      durationDays: typeof task.durationDays === "number" ? task.durationDays : undefined,
+      approvalRequired: task.approvalRequired === "Yes" ? "Yes" : "No",
+      deliverableType:
+        typeof task.deliverableType === "string" && task.deliverableType.trim()
+          ? task.deliverableType
+          : undefined,
+      notes: typeof task.notes === "string" && task.notes.trim() ? task.notes : undefined,
+    });
+
+    const updatedTasks = [
+      ...originalTasks.slice(0, 2).map(normalizeTask),
+      {
+        taskId: "T900",
+        taskDescription: "Validate field training materials",
+        phase: "Launch",
+        priority: "High" as const,
+        owner: "Training Lead",
+        dependency: "T002",
+        durationDays: 3,
+        approvalRequired: "No" as const,
+      },
+    ];
+
+    try {
+      await caller.templates.update({
+        id: marketingTemplateId,
+        sampleTasks: updatedTasks,
+      });
+
+      const templateAfter = await caller.templates.getById({ id: marketingTemplateId });
+      expect(templateAfter).toBeDefined();
+
+      const savedTasks = templateAfter ? JSON.parse(templateAfter.sampleTasks) : [];
+      expect(savedTasks.length).toBe(updatedTasks.length);
+      expect(
+        savedTasks.some((task: any) => task.taskDescription === "Validate field training materials")
+      ).toBe(true);
+
+      const project = await caller.projects.create({
+        name: "Template Update Persistence Test",
+        templateId: marketingTemplateId,
+        templateType: "Marketing Campaign",
+        status: "Planning",
+      });
+
+      const projectTasks = await caller.tasks.listByProject({ projectId: project.id });
+      expect(projectTasks.length).toBe(updatedTasks.length);
+      expect(
+        projectTasks.some((task) => task.taskDescription === "Validate field training materials")
+      ).toBe(true);
+    } finally {
+      const fallbackTasks = originalTasks.map(normalizeTask).filter((task: any) => task.taskDescription);
+      await caller.templates.update({
+        id: marketingTemplateId,
+        sampleTasks: fallbackTasks,
+      });
+    }
+  });
+
+  it("should reject template updates with duplicate task IDs", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.templates.update({
+        id: marketingTemplateId,
+        sampleTasks: [
+          {
+            taskId: "T010",
+            taskDescription: "First task",
+            phase: "Planning",
+          },
+          {
+            taskId: "T010",
+            taskDescription: "Second task",
+            phase: "Execution",
+          },
+        ],
+      })
+    ).rejects.toThrow(/Duplicate template task IDs/i);
+  });
+
+  it("should reject template updates with unknown dependencies", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.templates.update({
+        id: marketingTemplateId,
+        sampleTasks: [
+          {
+            taskId: "T020",
+            taskDescription: "First task",
+            phase: "Planning",
+          },
+          {
+            taskId: "T021",
+            taskDescription: "Second task",
+            phase: "Execution",
+            dependency: "T999",
+          },
+        ],
+      })
+    ).rejects.toThrow(/Unknown template task dependencies/i);
+  });
 });

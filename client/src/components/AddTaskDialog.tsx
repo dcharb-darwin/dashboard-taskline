@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { parseDateInputValue } from "@/lib/dateInput";
 
 interface AddTaskDialogProps {
   projectId: number;
@@ -16,48 +17,32 @@ interface AddTaskDialogProps {
   onSuccess: () => void;
 }
 
+const initialFormData = {
+  taskDescription: "",
+  startDate: "",
+  dueDate: "",
+  durationDays: "",
+  dependency: "",
+  owner: "",
+  status: "Not Started" as const,
+  priority: "Medium" as const,
+  phase: "",
+  budget: "",
+  approvalRequired: "No" as const,
+  approver: "",
+  deliverableType: "",
+  notes: "",
+};
+
 export function AddTaskDialog({ projectId, open, onOpenChange, onSuccess }: AddTaskDialogProps) {
-  const [formData, setFormData] = useState({
-    taskDescription: "",
-    startDate: "",
-    dueDate: "",
-    durationDays: "",
-    dependency: "",
-    owner: "",
-    status: "Not Started" as const,
-    priority: "Medium" as const,
-    phase: "",
-    budget: "",
-    actualBudget: "",
-    approvalRequired: "No" as const,
-    approver: "",
-    deliverableType: "",
-    notes: "",
-  });
+  const [formData, setFormData] = useState(initialFormData);
 
   const createTask = trpc.tasks.create.useMutation({
     onSuccess: () => {
       toast.success("Task created successfully");
       onSuccess();
       onOpenChange(false);
-      // Reset form
-      setFormData({
-        taskDescription: "",
-        startDate: "",
-        dueDate: "",
-        durationDays: "",
-        dependency: "",
-        owner: "",
-        status: "Not Started",
-        priority: "Medium",
-        phase: "",
-        budget: "",
-        actualBudget: "",
-        approvalRequired: "No",
-        approver: "",
-        deliverableType: "",
-        notes: "",
-      });
+      setFormData(initialFormData);
     },
     onError: (error) => {
       toast.error(`Failed to create task: ${error.message}`);
@@ -66,26 +51,63 @@ export function AddTaskDialog({ projectId, open, onOpenChange, onSuccess }: AddT
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+    const taskDescription = formData.taskDescription.trim();
+    if (!taskDescription) {
+      toast.error("Task description is required");
+      return;
+    }
+
+    const startDate = parseDateInputValue(formData.startDate);
+    const dueDate = parseDateInputValue(formData.dueDate);
+    if (formData.startDate && !startDate) {
+      toast.error("Start date is invalid");
+      return;
+    }
+    if (formData.dueDate && !dueDate) {
+      toast.error("Due date is invalid");
+      return;
+    }
+    if (startDate && dueDate && dueDate.getTime() < startDate.getTime()) {
+      toast.error("Due date cannot be earlier than start date");
+      return;
+    }
+
+    const durationRaw = formData.durationDays.trim();
+    const durationDays =
+      durationRaw.length > 0 ? Number.parseInt(durationRaw, 10) : undefined;
+    if (durationRaw.length > 0) {
+      if (!Number.isInteger(durationDays) || (durationDays ?? -1) < 0) {
+        toast.error("Duration must be a non-negative whole number");
+        return;
+      }
+    }
+
+    const budgetRaw = formData.budget.trim();
+    const parsedBudget = budgetRaw.length > 0 ? Number.parseFloat(budgetRaw) : undefined;
+    if (budgetRaw.length > 0) {
+      if (!Number.isFinite(parsedBudget) || (parsedBudget ?? -1) < 0) {
+        toast.error("Budget must be a non-negative number");
+        return;
+      }
+    }
+
     createTask.mutate({
       projectId,
-      taskDescription: formData.taskDescription,
-      startDate: formData.startDate ? new Date(formData.startDate) : undefined,
-      dueDate: formData.dueDate ? new Date(formData.dueDate) : undefined,
-      durationDays: formData.durationDays ? parseInt(formData.durationDays) : undefined,
-      dependency: formData.dependency || undefined,
-      owner: formData.owner || undefined,
+      taskDescription,
+      startDate,
+      dueDate,
+      durationDays,
+      dependency: formData.dependency.trim() || undefined,
+      owner: formData.owner.trim() || undefined,
       status: formData.status,
       priority: formData.priority,
-      phase: formData.phase || undefined,
-      budget: formData.budget ? Math.round(parseFloat(formData.budget) * 100) : undefined,
-      actualBudget: formData.actualBudget
-        ? Math.round(parseFloat(formData.actualBudget) * 100)
-        : undefined,
+      phase: formData.phase.trim() || undefined,
+      budget:
+        parsedBudget === undefined ? undefined : Math.round(parsedBudget * 100),
       approvalRequired: formData.approvalRequired,
-      approver: formData.approver || undefined,
-      deliverableType: formData.deliverableType || undefined,
-      notes: formData.notes || undefined,
+      approver: formData.approver.trim() || undefined,
+      deliverableType: formData.deliverableType.trim() || undefined,
+      notes: formData.notes.trim() || undefined,
     });
   };
 
@@ -202,7 +224,7 @@ export function AddTaskDialog({ projectId, open, onOpenChange, onSuccess }: AddT
             </div>
 
             {/* Dependency and Budget */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="dependency">Dependency</Label>
                 <Input
@@ -221,19 +243,6 @@ export function AddTaskDialog({ projectId, open, onOpenChange, onSuccess }: AddT
                   step="0.01"
                   value={formData.budget}
                   onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
-                  placeholder="0.00"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="actualBudget">Actual ($)</Label>
-                <Input
-                  id="actualBudget"
-                  type="number"
-                  step="0.01"
-                  value={formData.actualBudget}
-                  onChange={(e) =>
-                    setFormData({ ...formData, actualBudget: e.target.value })
-                  }
                   placeholder="0.00"
                 />
               </div>

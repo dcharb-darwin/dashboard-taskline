@@ -2,16 +2,9 @@ import { Calendar as BigCalendar, dateFnsLocalizer } from "react-big-calendar";
 import { format, parse, startOfWeek, getDay } from "date-fns";
 import { enUS } from "date-fns/locale";
 import { trpc } from "@/lib/trpc";
-import {
-  getSharedView,
-  type ProjectStatusFilter,
-  updateSharedView,
-} from "@/lib/sharedView";
 import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 
@@ -30,13 +23,6 @@ const localizer = dateFnsLocalizer({
 export default function Calendar() {
   const [, setLocation] = useLocation();
   const { data: projects, isLoading } = trpc.projects.list.useQuery();
-  const [statusFilter, setStatusFilter] = useState<ProjectStatusFilter>(
-    () => getSharedView().projectStatus
-  );
-
-  useEffect(() => {
-    updateSharedView({ projectStatus: statusFilter });
-  }, [statusFilter]);
 
   if (isLoading) {
     return (
@@ -47,14 +33,8 @@ export default function Calendar() {
   }
 
   // Transform projects into calendar events
-  const filteredProjects = useMemo(() => {
-    if (!projects) return [];
-    if (statusFilter === "all") return projects;
-    return projects.filter((project) => project.status === statusFilter);
-  }, [projects, statusFilter]);
-
   const events =
-    filteredProjects.map((project) => ({
+    projects?.map((project) => ({
       id: project.id,
       title: project.name,
       start: project.startDate ? new Date(project.startDate) : new Date(),
@@ -99,28 +79,9 @@ export default function Calendar() {
 
   return (
     <AppLayout>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold">Project Calendar</h1>
-          <p className="text-muted-foreground">View all projects by their start and completion dates</p>
-        </div>
-        <div className="w-[220px]">
-          <Select
-            value={statusFilter}
-            onValueChange={(value) => setStatusFilter(value as ProjectStatusFilter)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Filter by status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="Planning">Planning</SelectItem>
-              <SelectItem value="Active">Active</SelectItem>
-              <SelectItem value="On Hold">On Hold</SelectItem>
-              <SelectItem value="Complete">Complete</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold">Project Calendar</h1>
+        <p className="text-muted-foreground">View all projects by their start and completion dates</p>
       </div>
 
       <Card className="bg-white">

@@ -1,5 +1,5 @@
 # Multi-stage build for RTC Project Manager
-FROM node:22-alpine AS base
+FROM node:22-alpine AS builder
 
 # Install pnpm
 RUN npm install -g pnpm@10.4.1
@@ -14,21 +14,14 @@ COPY patches ./patches
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
-FROM base AS builder
-
 # Copy source code
 COPY . .
 
 # Build the application
 RUN pnpm build
 
-FROM base AS tools
-
-# Full source + dev dependencies for migrations, seeding, and diagnostics
-COPY . .
-
 # Production stage
-FROM node:22-alpine AS runtime
+FROM node:22-alpine
 
 # Install pnpm
 RUN npm install -g pnpm@10.4.1
@@ -39,7 +32,7 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 COPY patches ./patches
 
-# Install full dependencies: runtime server imports vite in this build
+# Install full dependency set: runtime server imports vite and docker workflow runs drizzle tooling in-container
 RUN pnpm install --frozen-lockfile
 
 # Copy built application from builder

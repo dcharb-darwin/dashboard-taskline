@@ -15,34 +15,6 @@
       "when": 1768447236117,
       "tag": "0001_faulty_kate_bishop",
       "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "5",
-      "when": 1768963200000,
-      "tag": "0002_template_lifecycle",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "5",
-      "when": 1768966800000,
-      "tag": "0003_budget_actuals",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "5",
-      "when": 1769001600000,
-      "tag": "0004_collaboration_notifications",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "5",
-      "when": 1769018400000,
-      "tag": "0005_portfolio_governance",
-      "breakpoints": true
     }
   ]
 }

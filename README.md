@@ -9,15 +9,21 @@ Choose your preferred deployment method:
 ### Option 1: Docker (Recommended)
 
 ```bash
-# Clone and enter repo
-git clone https://github.com/dcharb-darwin/dashboard-taskline.git
-cd dashboard-taskline
+# Extract archive
+tar -xzf rtc-project-manager-complete.tar.gz
+cd rtc-project-manager
 
-# One command: build + DB + migrations + optional seed + app
-./scripts/docker-quickstart.sh
+# Start with Docker Compose
+docker-compose up -d
+
+# Initialize database
+docker-compose exec app pnpm db:push
+
+# Seed sample data (optional)
+docker-compose exec app pnpm db:seed
 
 # Access application
-# http://localhost:3000
+open http://localhost:3000
 ```
 
 See **DOCKER_SETUP.md** for detailed Docker instructions.
@@ -40,7 +46,7 @@ cp .env.example .env
 pnpm db:push
 
 # Seed sample data (optional)
-pnpm exec tsx seed-database.mjs
+pnpm db:seed
 
 # Start development server
 pnpm dev
@@ -70,13 +76,6 @@ See **LOCAL_DEPLOYMENT.md** for detailed local setup instructions.
 - **Recent Projects Widget** - Quick access to latest projects
 - **Upcoming Deadlines** - 14-day deadline tracker
 - **Visual Indicators** - Status badges and progress bars
-- **Portfolio Health View** - On-track/risk distribution, throughput trend, and top-risk projects
-
-### Governance & Integrations
-- **Audit Logs** - Lifecycle traceability for project/template/task/integration actions
-- **Access Policies** - Admin/Editor/Viewer governance controls
-- **Webhook Subscriptions** - Outbound lifecycle events for external systems
-- **Inbound Integration API** - Optional token-gated event ingestion
 
 ### Excel Export
 - **Standardized Format** - Three-sheet workbook (Instructions, Dashboard, Project Plan)
@@ -180,10 +179,6 @@ rtc-project-manager/
 - `pnpm db:push` - Apply database migrations
 - `pnpm check` - TypeScript type checking
 - `pnpm format` - Format code with Prettier
-- `npm run docker:quickstart` - Build and run Docker stack with migrations (+ seed)
-- `npm run docker:up` - Start Docker stack in background
-- `npm run docker:down` - Stop Docker stack
-- `npm run docker:logs` - Tail application logs
 
 ## Testing
 

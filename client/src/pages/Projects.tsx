@@ -1,27 +1,36 @@
 import { trpc } from "@/lib/trpc";
 import { formatTemplateLabel } from "@/lib/template";
-import {
-  getSharedView,
-  type ProjectStatusFilter,
-  updateSharedView,
-} from "@/lib/sharedView";
 import { Button } from "@/components/ui/button";
 import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { FolderKanban, Plus, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 
 export default function Projects() {
   const { data: projects, isLoading } = trpc.projects.list.useQuery();
+  const [location] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>(() => getSharedView().projectStatus);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   useEffect(() => {
-    updateSharedView({ projectStatus: statusFilter as ProjectStatusFilter });
-  }, [statusFilter]);
+    const searchIndex = location.indexOf("?");
+    if (searchIndex < 0) return;
+
+    const searchParams = new URLSearchParams(location.slice(searchIndex));
+    const statusParam = searchParams.get("status");
+    const searchParam = searchParams.get("q");
+
+    const allowedStatus = new Set(["all", "Planning", "Active", "On Hold", "Complete"]);
+    if (statusParam && allowedStatus.has(statusParam)) {
+      setStatusFilter(statusParam);
+    }
+    if (searchParam !== null) {
+      setSearchTerm(searchParam);
+    }
+  }, [location]);
 
   const filteredProjects = projects?.filter((project) => {
     const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

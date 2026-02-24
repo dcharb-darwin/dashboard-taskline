@@ -1,57 +1,32 @@
-import { useState } from "react";
-import { Gantt, Task, ViewMode } from "gantt-task-react";
+import { useMemo, useState } from "react";
+import { Gantt, ViewMode } from "gantt-task-react";
 import { trpc } from "@/lib/trpc";
-import {
-  getSharedView,
-  type ProjectStatusFilter,
-  updateSharedView,
-} from "@/lib/sharedView";
 import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useEffect } from "react";
+import { useLocation } from "wouter";
+import { buildGanttTimeline } from "@/lib/gantt";
 import "gantt-task-react/dist/index.css";
-
-const parseDependencies = (value: string | null | undefined) =>
-  value
-    ? value
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean)
-    : [];
 
 export default function GanttChart() {
   const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.Month);
-  const [selectedProject, setSelectedProject] = useState<string>(
-    () => getSharedView().selectedProject
-  );
-  const [statusFilter, setStatusFilter] = useState<ProjectStatusFilter>(
-    () => getSharedView().projectStatus
-  );
+  const [selectedProject, setSelectedProject] = useState<string>("all");
+  const [, setLocation] = useLocation();
   
   const { data: projects, isLoading: projectsLoading } = trpc.projects.list.useQuery();
   const { data: allTasks, isLoading: tasksLoading } = trpc.tasks.listAll.useQuery();
-  const parsedSelectedProjectId =
-    selectedProject === "all" ? null : Number.parseInt(selectedProject, 10);
-  const selectedProjectId =
-    parsedSelectedProjectId !== null && Number.isFinite(parsedSelectedProjectId)
-      ? parsedSelectedProjectId
-      : null;
-  const { data: criticalPath } = trpc.tasks.criticalPath.useQuery(
-    { projectId: selectedProjectId ?? 0 },
-    {
-      enabled: selectedProjectId !== null,
-    }
-  );
 
-  useEffect(() => {
-    updateSharedView({
-      selectedProject,
-      projectStatus: statusFilter,
-    });
-  }, [selectedProject, statusFilter]);
+  const timeline = useMemo(
+    () =>
+      buildGanttTimeline({
+        projects,
+        tasks: allTasks,
+        selectedProject,
+      }),
+    [projects, allTasks, selectedProject],
+  );
 
   if (projectsLoading || tasksLoading) {
     return (
@@ -61,163 +36,11 @@ export default function GanttChart() {
     );
   }
 
-  // Transform projects and tasks into Gantt chart format
-  const tasks: Task[] = [];
-  const criticalTaskIds = new Set(criticalPath?.taskIds ?? []);
-  const filteredProjects =
-    statusFilter === "all"
-      ? projects
-      : projects?.filter((project) => project.status === statusFilter);
-
-  useEffect(() => {
-    if (selectedProject === "all") return;
-    const exists = filteredProjects?.some(
-      (project) => project.id === Number.parseInt(selectedProject, 10)
-    );
-    if (!exists) {
-      setSelectedProject("all");
-    }
-  }, [filteredProjects, selectedProject]);
-
-  if (selectedProject === "all") {
-    // Show all projects as top-level tasks
-    filteredProjects?.forEach((project) => {
-      const projectTasks = allTasks?.filter((t) => t.projectId === project.id) || [];
-      const taskCodeToId = new Map(projectTasks.map((task) => [task.taskId, task.id]));
-      
-      // Calculate project dates from tasks or use project dates
-      let projectStart = project.startDate ? new Date(project.startDate) : new Date();
-      let projectEnd = project.targetCompletionDate ? new Date(project.targetCompletionDate) : new Date();
-      
-      if (projectTasks.length > 0) {
-        const taskDates = projectTasks
-          .filter((t) => t.startDate || t.dueDate)
-          .map((t) => ({
-            start: t.startDate ? new Date(t.startDate) : new Date(),
-            end: t.dueDate ? new Date(t.dueDate) : new Date(),
-          }));
-        
-        if (taskDates.length > 0) {
-          projectStart = new Date(Math.min(...taskDates.map((d) => d.start.getTime())));
-          projectEnd = new Date(Math.max(...taskDates.map((d) => d.end.getTime())));
-        }
-      }
-
-      tasks.push({
-        id: `project-${project.id}`,
-        name: project.name,
-        start: projectStart,
-        end: projectEnd,
-        progress: 0, // Projects don't have completionPercent
-        type: "project",
-        hideChildren: false,
-      });
-
-      // Add tasks as children
-      projectTasks.forEach((task) => {
-        if (task.startDate && task.dueDate) {
-          const dependencyIds = parseDependencies(task.dependency)
-            .map((dependencyCode) => taskCodeToId.get(dependencyCode))
-            .filter((id): id is number => typeof id === "number")
-            .map((id) => `task-${id}`);
-
-          tasks.push({
-            id: `task-${task.id}`,
-            name: task.taskDescription,
-            start: new Date(task.startDate),
-            end: new Date(task.dueDate),
-            progress: task.completionPercent || 0,
-            type: "task",
-            project: `project-${project.id}`,
-            dependencies: dependencyIds.length > 0 ? dependencyIds : undefined,
-            styles: criticalTaskIds.has(task.id)
-              ? {
-                  backgroundColor: "#dc2626",
-                  backgroundSelectedColor: "#b91c1c",
-                  progressColor: "#fca5a5",
-                  progressSelectedColor: "#f87171",
-                }
-              : undefined,
-          });
-        }
-      });
-    });
-  } else {
-    // Show single project with all its tasks
-    const project = filteredProjects?.find((p) => p.id === parseInt(selectedProject));
-    if (project) {
-      const projectTasks = allTasks?.filter((t) => t.projectId === project.id) || [];
-      const taskCodeToId = new Map(projectTasks.map((task) => [task.taskId, task.id]));
-      
-      let projectStart = project.startDate ? new Date(project.startDate) : new Date();
-      let projectEnd = project.targetCompletionDate ? new Date(project.targetCompletionDate) : new Date();
-
-      tasks.push({
-        id: `project-${project.id}`,
-        name: project.name,
-        start: projectStart,
-        end: projectEnd,
-        progress: 0, // Projects don't have completionPercent
-        type: "project",
-        hideChildren: false,
-      });
-
-      projectTasks.forEach((task) => {
-        if (task.startDate && task.dueDate) {
-          const dependencyIds = parseDependencies(task.dependency)
-            .map((dependencyCode) => taskCodeToId.get(dependencyCode))
-            .filter((id): id is number => typeof id === "number")
-            .map((id) => `task-${id}`);
-          tasks.push({
-            id: `task-${task.id}`,
-            name: task.taskDescription,
-            start: new Date(task.startDate),
-            end: new Date(task.dueDate),
-            progress: task.completionPercent || 0,
-            type: "task",
-            project: `project-${project.id}`,
-            dependencies: dependencyIds.length > 0 ? dependencyIds : undefined,
-            styles: criticalTaskIds.has(task.id)
-              ? {
-                  backgroundColor: "#dc2626",
-                  backgroundSelectedColor: "#b91c1c",
-                  progressColor: "#fca5a5",
-                  progressSelectedColor: "#f87171",
-                }
-              : undefined,
-          });
-        }
-      });
-    }
-  }
-
   return (
     <AppLayout>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold">Gantt Chart</h1>
-          <p className="text-muted-foreground">Visualize project timelines and task dependencies</p>
-        </div>
-        <div className="w-[220px]">
-          <Select
-            value={statusFilter}
-            onValueChange={(value) => {
-              setStatusFilter(value as ProjectStatusFilter);
-              setSelectedProject("all");
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Filter by status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="Planning">Planning</SelectItem>
-              <SelectItem value="Active">Active</SelectItem>
-              <SelectItem value="On Hold">On Hold</SelectItem>
-              <SelectItem value="Complete">Complete</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold">Gantt Chart</h1>
+        <p className="text-muted-foreground">Visualize project timelines and task dependencies</p>
       </div>
 
       <Card className="bg-white">
@@ -234,7 +57,7 @@ export default function GanttChart() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Projects</SelectItem>
-                  {filteredProjects?.map((project) => (
+                  {projects?.map((project) => (
                     <SelectItem key={project.id} value={project.id.toString()}>
                       {project.name}
                     </SelectItem>
@@ -267,30 +90,32 @@ export default function GanttChart() {
               </div>
             </div>
           </div>
-          {selectedProjectId !== null && criticalPath && criticalPath.taskCodes.length > 0 ? (
-            <div className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-              <div className="flex items-center gap-2 font-medium">
-                <AlertTriangle className="h-4 w-4" />
-                Critical path ({criticalPath.totalDurationDays} days)
-              </div>
-              <p className="mt-1">
-                {criticalPath.taskCodes.join(" -> ")}
-                {criticalPath.blockedByCycle
-                  ? " (cycle detected in dependencies; showing best-effort path)"
-                  : ""}
-              </p>
-            </div>
-          ) : null}
         </CardHeader>
         <CardContent>
-          {tasks.length > 0 ? (
+          {timeline.tasks.length > 0 ? (
             <div className="overflow-x-auto">
               <Gantt
-                tasks={tasks}
+                tasks={timeline.tasks}
                 viewMode={viewMode}
                 listCellWidth="200px"
                 columnWidth={viewMode === ViewMode.Month ? 60 : viewMode === ViewMode.Week ? 100 : 50}
+                onSelect={(selectedTask) => {
+                  const match = timeline.drilldownMap.get(String(selectedTask.id));
+                  if (!match) return;
+                  if (match.taskId) {
+                    setLocation(`/projects/${match.projectId}?task=${match.taskId}`);
+                    return;
+                  }
+                  setLocation(`/projects/${match.projectId}`);
+                }}
               />
+              {timeline.inferredTaskCount > 0 ? (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  {timeline.inferredTaskCount} task
+                  {timeline.inferredTaskCount === 1 ? "" : "s"} lacked complete dates, so the
+                  timeline uses inferred sequencing.
+                </p>
+              ) : null}
             </div>
           ) : (
             <div className="py-12 text-center text-muted-foreground">
