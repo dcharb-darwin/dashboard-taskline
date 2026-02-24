@@ -1,4 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
+import type { TrpcContext } from "./_core/context";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
@@ -105,6 +106,26 @@ const applyTaskWorkflowGuardrails = (
   }
 
   return normalized;
+};
+
+const getActorName = (user: TrpcContext["user"]) => {
+  const name = user?.name?.trim();
+  if (name) return name;
+  const email = user?.email?.trim();
+  if (email) return email;
+  return "System";
+};
+
+const parseStringArray = (value: string | null | undefined) => {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
 };
 
 export const appRouter = router({
@@ -451,9 +472,10 @@ export const appRouter = router({
           notes: z.string().optional(),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;
-        const { getTaskById, updateTask } = await import("./db");
+        const { getTaskById, recordTaskChangeActivityAndNotifications, updateTask } =
+          await import("./db");
         const current = await getTaskById(id);
         if (!current) throw new Error("Task not found");
 
@@ -468,6 +490,14 @@ export const appRouter = router({
           completionPercent:
             normalized.completionPercent ?? data.completionPercent,
         });
+        const updated = await getTaskById(id);
+        if (updated) {
+          await recordTaskChangeActivityAndNotifications({
+            before: current,
+            after: updated,
+            actorName: getActorName(ctx.user),
+          });
+        }
         return { success: true };
       }),
     bulkUpdate: publicProcedure
@@ -490,8 +520,14 @@ export const appRouter = router({
             }),
         })
       )
-      .mutation(async ({ input }) => {
-        const { bulkUpdateTasks, getTasksByIds, validateTaskDependencies } = await import("./db");
+      .mutation(async ({ input, ctx }) => {
+        const {
+          bulkUpdateTasks,
+          getTaskById,
+          getTasksByIds,
+          recordTaskChangeActivityAndNotifications,
+          validateTaskDependencies,
+        } = await import("./db");
         const tasks = await getTasksByIds(input.taskIds);
         if (tasks.length !== input.taskIds.length) {
           throw new Error("One or more tasks were not found.");
@@ -514,6 +550,14 @@ export const appRouter = router({
             completionPercent:
               normalized.completionPercent ?? input.patch.completionPercent,
           });
+          const updated = await getTaskById(task.id);
+          if (updated) {
+            await recordTaskChangeActivityAndNotifications({
+              before: task,
+              after: updated,
+              actorName: getActorName(ctx.user),
+            });
+          }
         }
 
         const dependencyWarnings = await validateTaskDependencies(input.projectId);
@@ -534,6 +578,174 @@ export const appRouter = router({
       const { deleteTask } = await import("./db");
       await deleteTask(input.id);
       return { success: true };
+    }),
+  }),
+
+  // Collaboration router
+  collaboration: router({
+    comments: router({
+      list: publicProcedure
+        .input(
+          z.object({
+            projectId: z.number(),
+            taskId: z.number().optional(),
+          })
+        )
+        .query(async ({ input }) => {
+          const { getProjectComments } = await import("./db");
+          const comments = await getProjectComments(input.projectId, input.taskId);
+          return comments.map((comment) => ({
+            ...comment,
+            mentions: parseStringArray(comment.mentions),
+          }));
+        }),
+      create: publicProcedure
+        .input(
+          z.object({
+            projectId: z.number(),
+            taskId: z.number().optional(),
+            content: z.string().min(1),
+          })
+        )
+        .mutation(async ({ input, ctx }) => {
+          const { createProjectActivity, createProjectComment } = await import("./db");
+          const authorName = getActorName(ctx.user);
+          const trimmedContent = input.content.trim();
+          const comment = await createProjectComment({
+            projectId: input.projectId,
+            taskId: input.taskId,
+            authorName,
+            content: trimmedContent,
+          });
+          const mentionHandles = parseStringArray(comment.mentions);
+          await createProjectActivity({
+            projectId: input.projectId,
+            taskId: input.taskId,
+            actorName: authorName,
+            eventType: "comment_added",
+            summary:
+              input.taskId !== undefined
+                ? `${authorName} commented on task #${input.taskId}.`
+                : `${authorName} commented on the project.`,
+            metadata: JSON.stringify({
+              commentId: comment.id,
+              mentions: mentionHandles,
+            }),
+          });
+
+          return {
+            ...comment,
+            mentions: mentionHandles,
+          };
+        }),
+    }),
+    activity: router({
+      list: publicProcedure
+        .input(
+          z.object({
+            projectId: z.number(),
+            limit: z.number().min(1).max(200).optional(),
+          })
+        )
+        .query(async ({ input }) => {
+          const { getProjectActivities } = await import("./db");
+          return getProjectActivities(input.projectId, input.limit ?? 100);
+        }),
+    }),
+    notificationPreferences: router({
+      get: publicProcedure
+        .input(
+          z
+            .object({
+              scopeType: z.enum(["user", "team"]).optional(),
+              scopeKey: z.string().min(1).optional(),
+            })
+            .optional()
+        )
+        .query(async ({ input }) => {
+          const { ensureNotificationPreference, toNotificationPreferenceView } =
+            await import("./db");
+          const preference = await ensureNotificationPreference(
+            input?.scopeType ?? "team",
+            input?.scopeKey ?? "default"
+          );
+          return toNotificationPreferenceView(preference);
+        }),
+      set: publicProcedure
+        .input(
+          z.object({
+            scopeType: z.enum(["user", "team"]).optional(),
+            scopeKey: z.string().min(1).optional(),
+            channels: z.object({
+              inApp: z.boolean(),
+              email: z.boolean(),
+              slack: z.boolean(),
+              webhook: z.boolean(),
+              webhookUrl: z.string().optional(),
+            }),
+            events: z.object({
+              overdue: z.boolean(),
+              dueSoon: z.boolean(),
+              assignmentChanged: z.boolean(),
+              statusChanged: z.boolean(),
+            }),
+          })
+        )
+        .mutation(async ({ input }) => {
+          const { toNotificationPreferenceView, upsertNotificationPreference } =
+            await import("./db");
+          const preference = await upsertNotificationPreference(
+            input.scopeType ?? "team",
+            input.scopeKey ?? "default",
+            {
+              inAppEnabled: input.channels.inApp ? "Yes" : "No",
+              emailEnabled: input.channels.email ? "Yes" : "No",
+              slackEnabled: input.channels.slack ? "Yes" : "No",
+              webhookEnabled: input.channels.webhook ? "Yes" : "No",
+              webhookUrl: input.channels.webhookUrl ?? null,
+              overdueEnabled: input.events.overdue ? "Yes" : "No",
+              dueSoonEnabled: input.events.dueSoon ? "Yes" : "No",
+              assignmentEnabled: input.events.assignmentChanged ? "Yes" : "No",
+              statusChangeEnabled: input.events.statusChanged ? "Yes" : "No",
+            }
+          );
+          return toNotificationPreferenceView(preference);
+        }),
+    }),
+    notifications: router({
+      list: publicProcedure
+        .input(
+          z.object({
+            projectId: z.number(),
+            limit: z.number().min(1).max(200).optional(),
+          })
+        )
+        .query(async ({ input }) => {
+          const { listNotificationEvents, toNotificationEventView } = await import("./db");
+          const events = await listNotificationEvents(input.projectId, input.limit ?? 100);
+          return events.map(toNotificationEventView);
+        }),
+      generateDueAlerts: publicProcedure
+        .input(
+          z.object({
+            projectId: z.number(),
+            scopeType: z.enum(["user", "team"]).optional(),
+            scopeKey: z.string().min(1).optional(),
+          })
+        )
+        .mutation(async ({ input, ctx }) => {
+          const { generateScheduleNotifications, toNotificationEventView } = await import("./db");
+          const result = await generateScheduleNotifications(
+            input.projectId,
+            getActorName(ctx.user),
+            input.scopeType ?? "team",
+            input.scopeKey ?? "default"
+          );
+          return {
+            generatedCount: result.generatedCount,
+            notifications: result.notifications.map(toNotificationEventView),
+          };
+        }),
     }),
   }),
 

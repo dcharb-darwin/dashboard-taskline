@@ -143,6 +143,7 @@ rtc-project-manager/
 - **LOCAL_DEPLOYMENT.md** - Complete guide for local installation and development
 - **DOCKER_SETUP.md** - Docker deployment instructions and troubleshooting
 - **todo.md** - Development task tracking and feature checklist
+- **docs/AGENT_WORKFLOW.md** - Project-aware agent routing and execution workflow
 
 ## Requirements
 
@@ -179,6 +180,7 @@ rtc-project-manager/
 - `pnpm db:push` - Apply database migrations
 - `pnpm check` - TypeScript type checking
 - `pnpm format` - Format code with Prettier
+- `pnpm agent:profile` - Resolve and print the active agent workflow profile
 
 ## Testing
 

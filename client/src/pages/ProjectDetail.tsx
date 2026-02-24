@@ -13,14 +13,20 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { Link, useParams, useLocation } from "wouter";
 import {
   AlertTriangle,
   ArrowLeft,
+  BellRing,
   CheckSquare,
   Filter,
+  History,
+  MessageSquare,
   Pencil,
   Plus,
+  Send,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
@@ -46,6 +52,66 @@ type DependencyIssue = {
   taskId: string;
   dependencyTaskId?: string;
   message: string;
+};
+
+type CollaborationComment = {
+  id: number;
+  projectId: number;
+  taskId: number | null;
+  authorName: string;
+  content: string;
+  mentions: string[];
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
+
+type CollaborationActivity = {
+  id: number;
+  projectId: number;
+  taskId: number | null;
+  actorName: string;
+  eventType:
+    | "comment_added"
+    | "task_status_changed"
+    | "task_assignment_changed"
+    | "due_soon"
+    | "overdue";
+  summary: string;
+  metadata: string | null;
+  createdAt: Date | string;
+};
+
+type NotificationEventView = {
+  id: number;
+  projectId: number;
+  taskId: number | null;
+  eventType: "overdue" | "due_soon" | "assignment_changed" | "status_changed";
+  title: string;
+  message: string;
+  channels: string[];
+  createdAt: Date | string;
+  metadata: string | null;
+};
+
+type NotificationPreferenceView = {
+  id: number;
+  scopeType: "user" | "team";
+  scopeKey: string;
+  channels: {
+    inApp: boolean;
+    email: boolean;
+    slack: boolean;
+    webhook: boolean;
+    webhookUrl: string;
+  };
+  events: {
+    overdue: boolean;
+    dueSoon: boolean;
+    assignmentChanged: boolean;
+    statusChanged: boolean;
+  };
+  createdAt: Date | string;
+  updatedAt: Date | string;
 };
 
 const formatCurrency = (value: number | null | undefined) =>
@@ -79,11 +145,31 @@ export default function ProjectDetail() {
     actualBudget: "",
   });
   const [dependencyWarnings, setDependencyWarnings] = useState<DependencyIssue[]>([]);
+  const [commentContent, setCommentContent] = useState("");
+  const [commentTaskScope, setCommentTaskScope] = useState("project");
+  const [preferenceDraft, setPreferenceDraft] =
+    useState<NotificationPreferenceView | null>(null);
 
   const { data: project, isLoading: projectLoading, refetch: refetchProject } =
     trpc.projects.getById.useQuery({ id: projectId });
   const { data: tasks, isLoading: tasksLoading, refetch: refetchTasks } =
     trpc.tasks.listByProject.useQuery({ projectId });
+  const { data: comments, refetch: refetchComments } =
+    trpc.collaboration.comments.list.useQuery({ projectId });
+  const { data: activityFeed, refetch: refetchActivityFeed } =
+    trpc.collaboration.activity.list.useQuery({ projectId, limit: 100 });
+  const {
+    data: notificationFeed,
+    refetch: refetchNotificationFeed,
+  } = trpc.collaboration.notifications.list.useQuery({
+    projectId,
+    limit: 100,
+  });
+  const { data: notificationPreference } =
+    trpc.collaboration.notificationPreferences.get.useQuery({
+      scopeType: "team",
+      scopeKey: "default",
+    });
 
   const deleteProject = trpc.projects.delete.useMutation({
     onSuccess: () => {
@@ -91,11 +177,54 @@ export default function ProjectDetail() {
     },
   });
 
+  const createComment = trpc.collaboration.comments.create.useMutation({
+    onSuccess: async () => {
+      setCommentContent("");
+      setCommentTaskScope("project");
+      toast.success("Comment added");
+      await Promise.all([refetchComments(), refetchActivityFeed()]);
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const saveNotificationPreference =
+    trpc.collaboration.notificationPreferences.set.useMutation({
+      onSuccess: async (nextPreference) => {
+        setPreferenceDraft(nextPreference as NotificationPreferenceView);
+        toast.success("Notification preferences saved");
+        await refetchNotificationFeed();
+      },
+      onError: (error) => {
+        toast.error(error.message);
+      },
+    });
+
+  const generateDueAlerts =
+    trpc.collaboration.notifications.generateDueAlerts.useMutation({
+      onSuccess: async (result) => {
+        if (result.generatedCount === 0) {
+          toast.message("No new due-date alerts generated");
+        } else {
+          toast.success(`Generated ${result.generatedCount} alert(s)`);
+        }
+        await Promise.all([refetchNotificationFeed(), refetchActivityFeed()]);
+      },
+      onError: (error) => {
+        toast.error(error.message);
+      },
+    });
+
   const bulkUpdateTasks = trpc.tasks.bulkUpdate.useMutation({
     onSuccess: async (result) => {
       toast.success(`Updated ${result.updatedCount} task(s)`);
       setDependencyWarnings(result.dependencyWarnings as DependencyIssue[]);
-      await refetchTasks();
+      await Promise.all([
+        refetchTasks(),
+        refetchActivityFeed(),
+        refetchNotificationFeed(),
+      ]);
       setSelectedTaskIds([]);
       setShowBulkDialog(false);
       setBulkPatch({
@@ -151,6 +280,11 @@ export default function ProjectDetail() {
     const availableIds = new Set(tasks.map((task) => task.id));
     setSelectedTaskIds((prev) => prev.filter((taskId) => availableIds.has(taskId)));
   }, [tasks]);
+
+  useEffect(() => {
+    if (!notificationPreference) return;
+    setPreferenceDraft(notificationPreference as NotificationPreferenceView);
+  }, [notificationPreference]);
 
   if (projectLoading) {
     return (
@@ -308,6 +442,46 @@ export default function ProjectDetail() {
       taskIds: selectedTaskIds,
       patch: patch as any,
     });
+  };
+
+  const postComment = () => {
+    const content = commentContent.trim();
+    if (!content) {
+      toast.error("Comment cannot be empty");
+      return;
+    }
+    createComment.mutate({
+      projectId,
+      taskId:
+        commentTaskScope === "project"
+          ? undefined
+          : Number.parseInt(commentTaskScope, 10),
+      content,
+    });
+  };
+
+  const savePreferenceChanges = () => {
+    if (!preferenceDraft) return;
+    saveNotificationPreference.mutate({
+      scopeType: "team",
+      scopeKey: "default",
+      channels: preferenceDraft.channels,
+      events: preferenceDraft.events,
+    });
+  };
+
+  const commentTaskLabel = (taskId: number | null) => {
+    if (taskId === null) return "Project";
+    const task = tasks?.find((item) => item.id === taskId);
+    return task ? `${task.taskId} - ${task.taskDescription}` : `Task #${taskId}`;
+  };
+
+  const eventColorMap: Record<CollaborationActivity["eventType"], string> = {
+    comment_added: "bg-slate-100 text-slate-700",
+    task_status_changed: "bg-blue-100 text-blue-700",
+    task_assignment_changed: "bg-purple-100 text-purple-700",
+    due_soon: "bg-amber-100 text-amber-700",
+    overdue: "bg-red-100 text-red-700",
   };
 
   return (
@@ -629,6 +803,317 @@ export default function ProjectDetail() {
             )}
           </CardContent>
         </Card>
+
+        <div className="grid gap-6 lg:grid-cols-3">
+          <Card className="bg-white lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" />
+                Collaboration Comments
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-[220px_1fr_auto]">
+                <Select value={commentTaskScope} onValueChange={setCommentTaskScope}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="project">Project-wide</SelectItem>
+                    {(tasks || []).map((task) => (
+                      <SelectItem key={task.id} value={String(task.id)}>
+                        {task.taskId} - {task.taskDescription}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Textarea
+                  value={commentContent}
+                  onChange={(event) => setCommentContent(event.target.value)}
+                  placeholder="Add a comment. Use @handle to mention teammates."
+                  className="min-h-[84px]"
+                />
+                <Button
+                  type="button"
+                  className="h-fit"
+                  onClick={postComment}
+                  disabled={createComment.isPending}
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  {createComment.isPending ? "Posting..." : "Post"}
+                </Button>
+              </div>
+
+              {(comments as CollaborationComment[] | undefined)?.length ? (
+                <div className="space-y-3">
+                  {(comments as CollaborationComment[]).map((comment) => (
+                    <div key={comment.id} className="rounded border p-3">
+                      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span className="font-medium text-slate-700">{comment.authorName}</span>
+                        <span>{format(new Date(comment.createdAt), "MMM d, yyyy h:mm a")}</span>
+                        <span className="rounded bg-slate-100 px-2 py-0.5 text-slate-700">
+                          {commentTaskLabel(comment.taskId)}
+                        </span>
+                        {comment.mentions.length > 0 ? (
+                          <span className="rounded bg-blue-50 px-2 py-0.5 text-blue-700">
+                            Mentions: {comment.mentions.map((mention) => `@${mention}`).join(", ")}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="text-sm">{comment.content}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No comments yet. Add the first collaboration note for this project.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-4 w-4" />
+                Activity Timeline
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(activityFeed as CollaborationActivity[] | undefined)?.length ? (
+                <div className="space-y-3">
+                  {(activityFeed as CollaborationActivity[]).map((event) => (
+                    <div key={event.id} className="rounded border p-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span
+                          className={`rounded px-2 py-0.5 text-xs font-medium ${eventColorMap[event.eventType]}`}
+                        >
+                          {event.eventType.replace(/_/g, " ")}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(event.createdAt), "MMM d, h:mm a")}
+                        </span>
+                      </div>
+                      <p className="text-sm">{event.summary}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No activity has been recorded yet.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="bg-white">
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle className="flex items-center gap-2">
+                <BellRing className="h-4 w-4" />
+                Notifications and Alerts
+              </CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => generateDueAlerts.mutate({ projectId, scopeType: "team", scopeKey: "default" })}
+                disabled={generateDueAlerts.isPending}
+              >
+                {generateDueAlerts.isPending ? "Scanning..." : "Generate Due Alerts"}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {preferenceDraft ? (
+              <div className="space-y-4 rounded border p-4">
+                <p className="text-sm font-medium">Delivery Channels (Team Default)</p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
+                    In-app
+                    <Switch
+                      checked={preferenceDraft.channels.inApp}
+                      onCheckedChange={(checked) =>
+                        setPreferenceDraft((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                channels: { ...prev.channels, inApp: checked },
+                              }
+                            : prev
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
+                    Email
+                    <Switch
+                      checked={preferenceDraft.channels.email}
+                      onCheckedChange={(checked) =>
+                        setPreferenceDraft((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                channels: { ...prev.channels, email: checked },
+                              }
+                            : prev
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
+                    Slack
+                    <Switch
+                      checked={preferenceDraft.channels.slack}
+                      onCheckedChange={(checked) =>
+                        setPreferenceDraft((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                channels: { ...prev.channels, slack: checked },
+                              }
+                            : prev
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
+                    Webhook
+                    <Switch
+                      checked={preferenceDraft.channels.webhook}
+                      onCheckedChange={(checked) =>
+                        setPreferenceDraft((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                channels: { ...prev.channels, webhook: checked },
+                              }
+                            : prev
+                        )
+                      }
+                    />
+                  </label>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="webhook-url">Webhook URL</Label>
+                  <Input
+                    id="webhook-url"
+                    placeholder="https://hooks.example.com/..."
+                    value={preferenceDraft.channels.webhookUrl}
+                    onChange={(event) =>
+                      setPreferenceDraft((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              channels: {
+                                ...prev.channels,
+                                webhookUrl: event.target.value,
+                              },
+                            }
+                          : prev
+                      )
+                    }
+                  />
+                </div>
+
+                <p className="text-sm font-medium">Event Types</p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
+                    Overdue
+                    <Switch
+                      checked={preferenceDraft.events.overdue}
+                      onCheckedChange={(checked) =>
+                        setPreferenceDraft((prev) =>
+                          prev
+                            ? { ...prev, events: { ...prev.events, overdue: checked } }
+                            : prev
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
+                    Due Soon
+                    <Switch
+                      checked={preferenceDraft.events.dueSoon}
+                      onCheckedChange={(checked) =>
+                        setPreferenceDraft((prev) =>
+                          prev
+                            ? { ...prev, events: { ...prev.events, dueSoon: checked } }
+                            : prev
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
+                    Assignment Changes
+                    <Switch
+                      checked={preferenceDraft.events.assignmentChanged}
+                      onCheckedChange={(checked) =>
+                        setPreferenceDraft((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                events: { ...prev.events, assignmentChanged: checked },
+                              }
+                            : prev
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
+                    Status Changes
+                    <Switch
+                      checked={preferenceDraft.events.statusChanged}
+                      onCheckedChange={(checked) =>
+                        setPreferenceDraft((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                events: { ...prev.events, statusChanged: checked },
+                              }
+                            : prev
+                        )
+                      }
+                    />
+                  </label>
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={savePreferenceChanges}
+                  disabled={saveNotificationPreference.isPending}
+                >
+                  {saveNotificationPreference.isPending ? "Saving..." : "Save Preferences"}
+                </Button>
+              </div>
+            ) : null}
+
+            <div>
+              <p className="mb-2 text-sm font-medium">Recent Notification Events</p>
+              {(notificationFeed as NotificationEventView[] | undefined)?.length ? (
+                <div className="space-y-2">
+                  {(notificationFeed as NotificationEventView[]).map((event) => (
+                    <div key={event.id} className="rounded border p-3">
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium">{event.title}</p>
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(event.createdAt), "MMM d, h:mm a")}
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{event.message}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Channels: {event.channels.join(", ") || "None"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No notification events yet.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Dialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
@@ -780,8 +1265,12 @@ export default function ProjectDetail() {
           task={editingTask}
           open={!!editingTask}
           onOpenChange={(open) => !open && setEditingTask(null)}
-          onSuccess={() => {
-            refetchTasks();
+          onSuccess={async () => {
+            await Promise.all([
+              refetchTasks(),
+              refetchActivityFeed(),
+              refetchNotificationFeed(),
+            ]);
             setEditingTask(null);
           }}
         />
@@ -791,8 +1280,8 @@ export default function ProjectDetail() {
         projectId={projectId}
         open={showAddTask}
         onOpenChange={setShowAddTask}
-        onSuccess={() => {
-          refetchTasks();
+        onSuccess={async () => {
+          await Promise.all([refetchTasks(), refetchActivityFeed()]);
           setShowAddTask(false);
         }}
       />

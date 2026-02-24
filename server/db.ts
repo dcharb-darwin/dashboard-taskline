@@ -1,10 +1,18 @@
 import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
+  type InsertNotificationEvent,
+  type InsertNotificationPreference,
+  type InsertProjectActivity,
+  type InsertProjectComment,
   type InsertProject,
   type InsertTemplate,
   type InsertTask,
   type InsertUser,
+  type NotificationEvent,
+  type NotificationPreference,
+  type ProjectActivity,
+  type ProjectComment,
   type Project,
   type Task,
   type Template,
@@ -15,6 +23,17 @@ import { ENV } from "./_core/env";
 let _db: ReturnType<typeof drizzle> | null = null;
 
 export type TemplateStatus = Template["status"];
+export type NotificationScopeType = NotificationPreference["scopeType"];
+export type NotificationEventType = NotificationEvent["eventType"];
+
+const YES_NO_YES = "Yes" as const;
+const YES_NO_NO = "No" as const;
+const DUE_SOON_WINDOW_DAYS = 3;
+
+const DEFAULT_NOTIFICATION_SCOPE = {
+  scopeType: "team" as const,
+  scopeKey: "default",
+};
 
 type TemplateQueryOptions = {
   status?: TemplateStatus | "All";
@@ -28,6 +47,23 @@ export type DependencyValidationIssue = {
   dependencyTaskId?: string;
   message: string;
 };
+
+type DeliveryChannel = "in_app" | "email" | "slack" | "webhook";
+
+type NotificationPreferencesPatch = Partial<
+  Pick<
+    NotificationPreference,
+    | "inAppEnabled"
+    | "emailEnabled"
+    | "slackEnabled"
+    | "webhookEnabled"
+    | "webhookUrl"
+    | "overdueEnabled"
+    | "dueSoonEnabled"
+    | "assignmentEnabled"
+    | "statusChangeEnabled"
+  >
+>;
 
 type TemplateTaskSeed = {
   taskId: string;
@@ -255,13 +291,66 @@ type MemoryState = {
   templates: Template[];
   projects: Project[];
   tasks: Task[];
+  projectComments: ProjectComment[];
+  projectActivities: ProjectActivity[];
+  notificationPreferences: NotificationPreference[];
+  notificationEvents: NotificationEvent[];
   nextProjectId: number;
   nextTaskId: number;
+  nextProjectCommentId: number;
+  nextProjectActivityId: number;
+  nextNotificationPreferenceId: number;
+  nextNotificationEventId: number;
 };
 
 const copyTemplate = (template: Template): Template => ({ ...template });
 const copyProject = (project: Project): Project => ({ ...project });
 const copyTask = (task: Task): Task => ({ ...task });
+const copyProjectComment = (comment: ProjectComment): ProjectComment => ({ ...comment });
+const copyProjectActivity = (activity: ProjectActivity): ProjectActivity => ({ ...activity });
+const copyNotificationPreference = (
+  preference: NotificationPreference
+): NotificationPreference => ({ ...preference });
+const copyNotificationEvent = (event: NotificationEvent): NotificationEvent => ({ ...event });
+
+const asYesNo = (value: boolean) => (value ? YES_NO_YES : YES_NO_NO);
+const isEnabled = (value: "Yes" | "No" | null | undefined) => value === YES_NO_YES;
+
+const defaultNotificationPreference = (
+  scopeType: NotificationScopeType,
+  scopeKey: string
+): Omit<NotificationPreference, "id" | "createdAt" | "updatedAt"> => ({
+  scopeType,
+  scopeKey,
+  inAppEnabled: YES_NO_YES,
+  emailEnabled: YES_NO_NO,
+  slackEnabled: YES_NO_NO,
+  webhookEnabled: YES_NO_NO,
+  webhookUrl: null,
+  overdueEnabled: YES_NO_YES,
+  dueSoonEnabled: YES_NO_YES,
+  assignmentEnabled: YES_NO_YES,
+  statusChangeEnabled: YES_NO_YES,
+});
+
+const normalizeWebhookUrl = (value: string | null | undefined) => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const getDeliveryChannels = (
+  preference: NotificationPreference
+): DeliveryChannel[] => {
+  const channels: DeliveryChannel[] = [];
+  if (isEnabled(preference.inAppEnabled)) channels.push("in_app");
+  if (isEnabled(preference.emailEnabled)) channels.push("email");
+  if (isEnabled(preference.slackEnabled)) channels.push("slack");
+  if (isEnabled(preference.webhookEnabled) && preference.webhookUrl) {
+    channels.push("webhook");
+  }
+  return channels;
+};
 
 const buildMemoryState = (): MemoryState => {
   const seedTimestamp = new Date("2025-01-01T00:00:00.000Z");
@@ -389,12 +478,29 @@ const buildMemoryState = (): MemoryState => {
     },
   ];
 
+  const notificationPreferences: NotificationPreference[] = [
+    {
+      id: 1,
+      ...defaultNotificationPreference(DEFAULT_NOTIFICATION_SCOPE.scopeType, DEFAULT_NOTIFICATION_SCOPE.scopeKey),
+      createdAt: new Date(seedTimestamp),
+      updatedAt: new Date(seedTimestamp),
+    },
+  ];
+
   return {
     templates,
     projects,
     tasks,
+    projectComments: [],
+    projectActivities: [],
+    notificationPreferences,
+    notificationEvents: [],
     nextProjectId: projects.length + 1,
     nextTaskId: tasks.length + 1,
+    nextProjectCommentId: 1,
+    nextProjectActivityId: 1,
+    nextNotificationPreferenceId: notificationPreferences.length + 1,
+    nextNotificationEventId: 1,
   };
 };
 
@@ -403,6 +509,50 @@ let memoryState = buildMemoryState();
 const getNextTaskCode = (projectId: number) => {
   const existingTasks = memoryState.tasks.filter((task) => task.projectId === projectId);
   return `T${String(existingTasks.length + 1).padStart(3, "0")}`;
+};
+
+const parseJsonArray = (value: string | null | undefined): string[] => {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
+};
+
+const toNotificationFingerprint = (
+  eventType: NotificationEventType,
+  taskId: number | null | undefined,
+  dueDate: Date | null | undefined
+) => {
+  const dayKey = dueDate ? dueDate.toISOString().slice(0, 10) : "no-date";
+  return `${eventType}:${taskId ?? "none"}:${dayKey}`;
+};
+
+const parseEventMetadata = (value: string | null | undefined) => {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+};
+
+const getMentionHandles = (content: string) => {
+  const handles = new Set<string>();
+  const regex = /@([a-zA-Z0-9._-]+)/g;
+  let match: RegExpExecArray | null = null;
+  while ((match = regex.exec(content)) !== null) {
+    const handle = match[1]?.trim();
+    if (handle) handles.add(handle);
+  }
+  return Array.from(handles);
 };
 
 const parseDependencies = (dependency: string | null) =>
@@ -1074,4 +1224,497 @@ export async function getDashboardStats() {
   const allProjects = await db.select().from(projects);
   const allTasks = await db.select().from(tasks);
   return computeDashboardStats(allProjects, allTasks);
+}
+
+// ============================================================================
+// COLLABORATION QUERIES
+// ============================================================================
+
+export async function getProjectComments(projectId: number, taskId?: number) {
+  const db = await getDb();
+  if (!db) {
+    return memoryState.projectComments
+      .filter((comment) => {
+        if (comment.projectId !== projectId) return false;
+        if (taskId === undefined) return true;
+        return comment.taskId === taskId;
+      })
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map(copyProjectComment);
+  }
+
+  const { projectComments } = await import("../drizzle/schema");
+  if (taskId === undefined) {
+    return db
+      .select()
+      .from(projectComments)
+      .where(eq(projectComments.projectId, projectId))
+      .orderBy(desc(projectComments.createdAt));
+  }
+
+  return db
+    .select()
+    .from(projectComments)
+    .where(and(eq(projectComments.projectId, projectId), eq(projectComments.taskId, taskId)))
+    .orderBy(desc(projectComments.createdAt));
+}
+
+export async function createProjectComment(
+  data: Omit<InsertProjectComment, "mentions"> & { mentions?: string[] | null }
+) {
+  const serializedMentions = JSON.stringify(data.mentions ?? getMentionHandles(data.content));
+  const db = await getDb();
+  if (!db) {
+    const comment: ProjectComment = {
+      id: memoryState.nextProjectCommentId++,
+      projectId: data.projectId,
+      taskId: data.taskId ?? null,
+      authorName: data.authorName,
+      content: data.content,
+      mentions: serializedMentions,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    memoryState.projectComments.push(comment);
+    return copyProjectComment(comment);
+  }
+
+  const { projectComments } = await import("../drizzle/schema");
+  const result = await db
+    .insert(projectComments)
+    .values({
+      ...data,
+      mentions: serializedMentions,
+    })
+    .$returningId();
+  const id = result[0]?.id;
+  if (!id) throw new Error("Failed to create project comment");
+  const created = await db
+    .select()
+    .from(projectComments)
+    .where(eq(projectComments.id, id))
+    .limit(1);
+  if (!created[0]) throw new Error("Failed to fetch project comment");
+  return created[0];
+}
+
+export async function getProjectActivities(projectId: number, limit = 100) {
+  const boundedLimit = Math.max(1, Math.min(200, limit));
+  const db = await getDb();
+  if (!db) {
+    return memoryState.projectActivities
+      .filter((activity) => activity.projectId === projectId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, boundedLimit)
+      .map(copyProjectActivity);
+  }
+
+  const { projectActivities } = await import("../drizzle/schema");
+  return db
+    .select()
+    .from(projectActivities)
+    .where(eq(projectActivities.projectId, projectId))
+    .orderBy(desc(projectActivities.createdAt))
+    .limit(boundedLimit);
+}
+
+export async function createProjectActivity(data: InsertProjectActivity) {
+  const db = await getDb();
+  if (!db) {
+    const activity: ProjectActivity = {
+      id: memoryState.nextProjectActivityId++,
+      projectId: data.projectId,
+      taskId: data.taskId ?? null,
+      actorName: data.actorName,
+      eventType: data.eventType,
+      summary: data.summary,
+      metadata: data.metadata ?? null,
+      createdAt: new Date(),
+    };
+    memoryState.projectActivities.push(activity);
+    return copyProjectActivity(activity);
+  }
+
+  const { projectActivities } = await import("../drizzle/schema");
+  const result = await db.insert(projectActivities).values(data).$returningId();
+  const id = result[0]?.id;
+  if (!id) throw new Error("Failed to create project activity");
+  const created = await db
+    .select()
+    .from(projectActivities)
+    .where(eq(projectActivities.id, id))
+    .limit(1);
+  if (!created[0]) throw new Error("Failed to fetch project activity");
+  return created[0];
+}
+
+// ============================================================================
+// NOTIFICATION QUERIES
+// ============================================================================
+
+export async function getNotificationPreference(
+  scopeType: NotificationScopeType = DEFAULT_NOTIFICATION_SCOPE.scopeType,
+  scopeKey: string = DEFAULT_NOTIFICATION_SCOPE.scopeKey
+) {
+  const db = await getDb();
+  if (!db) {
+    const item = memoryState.notificationPreferences.find(
+      (preference) =>
+        preference.scopeType === scopeType && preference.scopeKey === scopeKey
+    );
+    return item ? copyNotificationPreference(item) : undefined;
+  }
+
+  const { notificationPreferences } = await import("../drizzle/schema");
+  const result = await db
+    .select()
+    .from(notificationPreferences)
+    .where(
+      and(
+        eq(notificationPreferences.scopeType, scopeType),
+        eq(notificationPreferences.scopeKey, scopeKey)
+      )
+    )
+    .limit(1);
+  return result[0];
+}
+
+export async function upsertNotificationPreference(
+  scopeType: NotificationScopeType = DEFAULT_NOTIFICATION_SCOPE.scopeType,
+  scopeKey: string = DEFAULT_NOTIFICATION_SCOPE.scopeKey,
+  patch: NotificationPreferencesPatch = {}
+) {
+  const normalizedPatch: NotificationPreferencesPatch = {
+    ...patch,
+    webhookUrl: normalizeWebhookUrl(patch.webhookUrl),
+  };
+  const db = await getDb();
+
+  if (!db) {
+    const index = memoryState.notificationPreferences.findIndex(
+      (preference) =>
+        preference.scopeType === scopeType && preference.scopeKey === scopeKey
+    );
+    const now = new Date();
+
+    if (index >= 0) {
+      const current = memoryState.notificationPreferences[index]!;
+      const next: NotificationPreference = {
+        ...current,
+        ...normalizedPatch,
+        updatedAt: now,
+      };
+      memoryState.notificationPreferences[index] = next;
+      return copyNotificationPreference(next);
+    }
+
+    const next: NotificationPreference = {
+      id: memoryState.nextNotificationPreferenceId++,
+      ...defaultNotificationPreference(scopeType, scopeKey),
+      ...normalizedPatch,
+      createdAt: now,
+      updatedAt: now,
+    };
+    memoryState.notificationPreferences.push(next);
+    return copyNotificationPreference(next);
+  }
+
+  const existing = await getNotificationPreference(scopeType, scopeKey);
+  const { notificationPreferences } = await import("../drizzle/schema");
+
+  if (existing) {
+    await db
+      .update(notificationPreferences)
+      .set(normalizedPatch as Partial<InsertNotificationPreference>)
+      .where(eq(notificationPreferences.id, existing.id));
+    const updated = await getNotificationPreference(scopeType, scopeKey);
+    if (!updated) throw new Error("Failed to update notification preference");
+    return updated;
+  }
+
+  const result = await db
+    .insert(notificationPreferences)
+    .values({
+      ...defaultNotificationPreference(scopeType, scopeKey),
+      ...normalizedPatch,
+    })
+    .$returningId();
+  const id = result[0]?.id;
+  if (!id) throw new Error("Failed to create notification preference");
+  const created = await db
+    .select()
+    .from(notificationPreferences)
+    .where(eq(notificationPreferences.id, id))
+    .limit(1);
+  if (!created[0]) throw new Error("Failed to fetch notification preference");
+  return created[0];
+}
+
+export async function ensureNotificationPreference(
+  scopeType: NotificationScopeType = DEFAULT_NOTIFICATION_SCOPE.scopeType,
+  scopeKey: string = DEFAULT_NOTIFICATION_SCOPE.scopeKey
+) {
+  const existing = await getNotificationPreference(scopeType, scopeKey);
+  if (existing) return existing;
+  return upsertNotificationPreference(scopeType, scopeKey, {});
+}
+
+export async function listNotificationEvents(projectId: number, limit = 100) {
+  const boundedLimit = Math.max(1, Math.min(200, limit));
+  const db = await getDb();
+  if (!db) {
+    return memoryState.notificationEvents
+      .filter((event) => event.projectId === projectId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, boundedLimit)
+      .map(copyNotificationEvent);
+  }
+
+  const { notificationEvents } = await import("../drizzle/schema");
+  return db
+    .select()
+    .from(notificationEvents)
+    .where(eq(notificationEvents.projectId, projectId))
+    .orderBy(desc(notificationEvents.createdAt))
+    .limit(boundedLimit);
+}
+
+export async function createNotificationEvent(data: InsertNotificationEvent) {
+  const db = await getDb();
+  if (!db) {
+    const event: NotificationEvent = {
+      id: memoryState.nextNotificationEventId++,
+      projectId: data.projectId,
+      taskId: data.taskId ?? null,
+      eventType: data.eventType,
+      title: data.title,
+      message: data.message,
+      channels: data.channels,
+      metadata: data.metadata ?? null,
+      createdAt: new Date(),
+    };
+    memoryState.notificationEvents.push(event);
+    return copyNotificationEvent(event);
+  }
+
+  const { notificationEvents } = await import("../drizzle/schema");
+  const result = await db.insert(notificationEvents).values(data).$returningId();
+  const id = result[0]?.id;
+  if (!id) throw new Error("Failed to create notification event");
+  const created = await db
+    .select()
+    .from(notificationEvents)
+    .where(eq(notificationEvents.id, id))
+    .limit(1);
+  if (!created[0]) throw new Error("Failed to fetch notification event");
+  return created[0];
+}
+
+export async function recordTaskChangeActivityAndNotifications(args: {
+  before: Task;
+  after: Task;
+  actorName: string;
+  scopeType?: NotificationScopeType;
+  scopeKey?: string;
+}) {
+  const activities: ProjectActivity[] = [];
+  const notifications: NotificationEvent[] = [];
+  const preference = await ensureNotificationPreference(
+    args.scopeType ?? DEFAULT_NOTIFICATION_SCOPE.scopeType,
+    args.scopeKey ?? DEFAULT_NOTIFICATION_SCOPE.scopeKey
+  );
+  const channels = getDeliveryChannels(preference);
+
+  const ownerChanged = (args.before.owner ?? "") !== (args.after.owner ?? "");
+  const statusChanged = args.before.status !== args.after.status;
+
+  if (ownerChanged) {
+    activities.push(
+      await createProjectActivity({
+        projectId: args.after.projectId,
+        taskId: args.after.id,
+        actorName: args.actorName,
+        eventType: "task_assignment_changed",
+        summary: `${args.actorName} reassigned ${args.after.taskId} to ${args.after.owner ?? "Unassigned"}.`,
+        metadata: JSON.stringify({
+          from: args.before.owner ?? null,
+          to: args.after.owner ?? null,
+        }),
+      })
+    );
+
+    if (isEnabled(preference.assignmentEnabled) && channels.length > 0) {
+      notifications.push(
+        await createNotificationEvent({
+          projectId: args.after.projectId,
+          taskId: args.after.id,
+          eventType: "assignment_changed",
+          title: `${args.after.taskId} assignment changed`,
+          message: `Task ${args.after.taskId} is now assigned to ${args.after.owner ?? "Unassigned"}.`,
+          channels: JSON.stringify(channels),
+          metadata: JSON.stringify({
+            from: args.before.owner ?? null,
+            to: args.after.owner ?? null,
+          }),
+        })
+      );
+    }
+  }
+
+  if (statusChanged) {
+    activities.push(
+      await createProjectActivity({
+        projectId: args.after.projectId,
+        taskId: args.after.id,
+        actorName: args.actorName,
+        eventType: "task_status_changed",
+        summary: `${args.actorName} changed ${args.after.taskId} status to ${args.after.status}.`,
+        metadata: JSON.stringify({
+          from: args.before.status,
+          to: args.after.status,
+        }),
+      })
+    );
+
+    if (isEnabled(preference.statusChangeEnabled) && channels.length > 0) {
+      notifications.push(
+        await createNotificationEvent({
+          projectId: args.after.projectId,
+          taskId: args.after.id,
+          eventType: "status_changed",
+          title: `${args.after.taskId} status changed`,
+          message: `Task ${args.after.taskId} moved from ${args.before.status} to ${args.after.status}.`,
+          channels: JSON.stringify(channels),
+          metadata: JSON.stringify({
+            from: args.before.status,
+            to: args.after.status,
+          }),
+        })
+      );
+    }
+  }
+
+  return { activities, notifications };
+}
+
+export async function generateScheduleNotifications(
+  projectId: number,
+  actorName = "System",
+  scopeType: NotificationScopeType = DEFAULT_NOTIFICATION_SCOPE.scopeType,
+  scopeKey: string = DEFAULT_NOTIFICATION_SCOPE.scopeKey
+) {
+  const preference = await ensureNotificationPreference(scopeType, scopeKey);
+  const channels = getDeliveryChannels(preference);
+  if (channels.length === 0) {
+    return {
+      generatedCount: 0,
+      notifications: [] as NotificationEvent[],
+    };
+  }
+
+  const tasks = await getTasksByProjectId(projectId);
+  const existingEvents = await listNotificationEvents(projectId, 200);
+  const existingFingerprints = new Set<string>();
+  for (const event of existingEvents) {
+    const metadata = parseEventMetadata(event.metadata);
+    const fingerprint = metadata.fingerprint;
+    if (typeof fingerprint === "string") {
+      existingFingerprints.add(fingerprint);
+    }
+  }
+
+  const now = new Date();
+  const dueSoonThreshold = new Date(
+    now.getTime() + DUE_SOON_WINDOW_DAYS * 24 * 60 * 60 * 1000
+  );
+  const created: NotificationEvent[] = [];
+
+  for (const task of tasks) {
+    if (!task.dueDate || task.status === "Complete") continue;
+
+    let eventType: NotificationEventType | null = null;
+    if (task.dueDate.getTime() < now.getTime() && isEnabled(preference.overdueEnabled)) {
+      eventType = "overdue";
+    } else if (
+      task.dueDate.getTime() >= now.getTime() &&
+      task.dueDate.getTime() <= dueSoonThreshold.getTime() &&
+      isEnabled(preference.dueSoonEnabled)
+    ) {
+      eventType = "due_soon";
+    }
+
+    if (!eventType) continue;
+    const fingerprint = toNotificationFingerprint(eventType, task.id, task.dueDate);
+    if (existingFingerprints.has(fingerprint)) continue;
+    existingFingerprints.add(fingerprint);
+
+    const title =
+      eventType === "overdue"
+        ? `${task.taskId} is overdue`
+        : `${task.taskId} is due soon`;
+    const message =
+      eventType === "overdue"
+        ? `Task ${task.taskId} is overdue (due ${task.dueDate.toISOString().slice(0, 10)}).`
+        : `Task ${task.taskId} is due soon (${task.dueDate.toISOString().slice(0, 10)}).`;
+
+    const notification = await createNotificationEvent({
+      projectId,
+      taskId: task.id,
+      eventType,
+      title,
+      message,
+      channels: JSON.stringify(channels),
+      metadata: JSON.stringify({
+        fingerprint,
+        dueDate: task.dueDate.toISOString(),
+      }),
+    });
+    created.push(notification);
+
+    await createProjectActivity({
+      projectId,
+      taskId: task.id,
+      actorName,
+      eventType: eventType === "overdue" ? "overdue" : "due_soon",
+      summary: message,
+      metadata: JSON.stringify({
+        notificationEventId: notification.id,
+      }),
+    });
+  }
+
+  return {
+    generatedCount: created.length,
+    notifications: created,
+  };
+}
+
+export function toNotificationPreferenceView(preference: NotificationPreference) {
+  return {
+    id: preference.id,
+    scopeType: preference.scopeType,
+    scopeKey: preference.scopeKey,
+    channels: {
+      inApp: isEnabled(preference.inAppEnabled),
+      email: isEnabled(preference.emailEnabled),
+      slack: isEnabled(preference.slackEnabled),
+      webhook: isEnabled(preference.webhookEnabled),
+      webhookUrl: preference.webhookUrl ?? "",
+    },
+    events: {
+      overdue: isEnabled(preference.overdueEnabled),
+      dueSoon: isEnabled(preference.dueSoonEnabled),
+      assignmentChanged: isEnabled(preference.assignmentEnabled),
+      statusChanged: isEnabled(preference.statusChangeEnabled),
+    },
+    createdAt: preference.createdAt,
+    updatedAt: preference.updatedAt,
+  };
+}
+
+export function toNotificationEventView(event: NotificationEvent) {
+  return {
+    ...event,
+    channels: parseJsonArray(event.channels),
+  };
 }

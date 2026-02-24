@@ -97,3 +97,89 @@ export const tasks = mysqlTable("tasks", {
 
 export type Task = typeof tasks.$inferSelect;
 export type InsertTask = typeof tasks.$inferInsert;
+
+/**
+ * Project comments table - contextual collaboration on projects and tasks.
+ */
+export const projectComments = mysqlTable("project_comments", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  taskId: int("taskId").references(() => tasks.id, { onDelete: "set null" }),
+  authorName: text("authorName").notNull(),
+  content: text("content").notNull(),
+  mentions: text("mentions"), // JSON array of mention handles
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ProjectComment = typeof projectComments.$inferSelect;
+export type InsertProjectComment = typeof projectComments.$inferInsert;
+
+/**
+ * Project activity timeline table - immutable record of key project changes.
+ */
+export const projectActivities = mysqlTable("project_activities", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  taskId: int("taskId").references(() => tasks.id, { onDelete: "set null" }),
+  actorName: text("actorName").notNull(),
+  eventType: mysqlEnum("eventType", [
+    "comment_added",
+    "task_status_changed",
+    "task_assignment_changed",
+    "due_soon",
+    "overdue",
+  ]).notNull(),
+  summary: text("summary").notNull(),
+  metadata: text("metadata"), // JSON object for event details
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ProjectActivity = typeof projectActivities.$inferSelect;
+export type InsertProjectActivity = typeof projectActivities.$inferInsert;
+
+/**
+ * Notification preferences table - per user/team routing and event toggles.
+ */
+export const notificationPreferences = mysqlTable("notification_preferences", {
+  id: int("id").autoincrement().primaryKey(),
+  scopeType: mysqlEnum("scopeType", ["user", "team"]).default("team").notNull(),
+  scopeKey: varchar("scopeKey", { length: 128 }).notNull(),
+  inAppEnabled: mysqlEnum("inAppEnabled", ["Yes", "No"]).default("Yes").notNull(),
+  emailEnabled: mysqlEnum("emailEnabled", ["Yes", "No"]).default("No").notNull(),
+  slackEnabled: mysqlEnum("slackEnabled", ["Yes", "No"]).default("No").notNull(),
+  webhookEnabled: mysqlEnum("webhookEnabled", ["Yes", "No"]).default("No").notNull(),
+  webhookUrl: text("webhookUrl"),
+  overdueEnabled: mysqlEnum("overdueEnabled", ["Yes", "No"]).default("Yes").notNull(),
+  dueSoonEnabled: mysqlEnum("dueSoonEnabled", ["Yes", "No"]).default("Yes").notNull(),
+  assignmentEnabled: mysqlEnum("assignmentEnabled", ["Yes", "No"]).default("Yes").notNull(),
+  statusChangeEnabled: mysqlEnum("statusChangeEnabled", ["Yes", "No"]).default("Yes").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type NotificationPreference = typeof notificationPreferences.$inferSelect;
+export type InsertNotificationPreference = typeof notificationPreferences.$inferInsert;
+
+/**
+ * Notification events table - generated events to support in-app timeline/feeds.
+ */
+export const notificationEvents = mysqlTable("notification_events", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  taskId: int("taskId").references(() => tasks.id, { onDelete: "set null" }),
+  eventType: mysqlEnum("eventType", [
+    "overdue",
+    "due_soon",
+    "assignment_changed",
+    "status_changed",
+  ]).notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  channels: text("channels").notNull(), // JSON array: in_app, email, slack, webhook
+  metadata: text("metadata"), // JSON object for dedupe and routing metadata
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type NotificationEvent = typeof notificationEvents.$inferSelect;
+export type InsertNotificationEvent = typeof notificationEvents.$inferInsert;

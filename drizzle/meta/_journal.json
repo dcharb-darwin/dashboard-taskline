@@ -29,6 +29,13 @@
       "when": 1768966800000,
       "tag": "0003_budget_actuals",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1769001600000,
+      "tag": "0004_collaboration_notifications",
+      "breakpoints": true
     }
   ]
 }
