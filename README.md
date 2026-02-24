@@ -142,7 +142,6 @@ rtc-project-manager/
 
 - **LOCAL_DEPLOYMENT.md** - Complete guide for local installation and development
 - **DOCKER_SETUP.md** - Docker deployment instructions and troubleshooting
-- **todo.md** - Development task tracking and feature checklist
 
 ## Requirements
 
