@@ -31,9 +31,9 @@ A full-stack project and task management platform for template-based delivery tr
 ### Docker (recommended)
 ```bash
 cp .env.example .env
-docker compose up -d --build db migrate app
-# Optional sample data
-docker compose --profile seed up -d --build seed
+docker compose up -d --build
+# Optional: rebuild with sample data
+SEED_ON_START=true docker compose up -d --build
 open http://localhost:3000
 ```
 
@@ -78,13 +78,13 @@ See detailed guides in [`docs/setup/`](docs/setup/).
 | Branch | Purpose |
 |--------|---------|
 | `main` | Production-ready |
-| `gen2` | Current development |
+| `dev` | Current development |
 | `staging` | Release validation |
 
 ## Documentation
 
 - [Setup Guides](docs/setup/)
-- [PRD Handoff](docs/PRD-HANDOFF.md)
+- [PRD](docs/PRD.md)
 - [Contributing](CONTRIBUTING.md)
 
 ## License

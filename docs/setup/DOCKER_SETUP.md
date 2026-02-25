@@ -1,6 +1,6 @@
 # Docker Setup
 
-This guide covers local Docker Compose operation for Dashboard Taskline.
+This guide covers local Docker Compose operation for Darwin TaskLine.
 
 ## Prerequisites
 - Docker Engine 20+
@@ -12,10 +12,11 @@ docker --version
 docker compose version
 ```
 
-## Services
-- `app`: production-mode web app with embedded SQLite on port `3000`
-- `migrate`: one-shot schema migration (`pnpm db:push`)
-- `seed`: one-shot sample data loader (`pnpm db:seed`, profile `seed`)
+## Service
+
+The Compose file defines a single `app` service that runs the production-mode web server with embedded SQLite on port `3000`.
+
+Optional seeding is controlled by the `SEED_ON_START` environment variable rather than a separate service.
 
 ## First Run
 
@@ -24,14 +25,14 @@ docker compose version
 cp .env.example .env
 ```
 
-2. Build and start core services:
+2. Build and start:
 ```bash
-docker compose up -d --build migrate app
+docker compose up -d --build
 ```
 
-3. (Optional) seed sample data:
+3. (Optional) seed sample data — set the env var before starting:
 ```bash
-docker compose --profile seed up -d --build seed
+SEED_ON_START=true docker compose up -d --build
 ```
 
 4. Open the app:
@@ -49,7 +50,7 @@ View logs:
 docker compose logs -f app
 ```
 
-Restart services:
+Restart:
 ```bash
 docker compose restart app
 ```
@@ -66,20 +67,27 @@ docker compose down -v
 
 ## Database Operations
 
-Re-run migration manually:
-```bash
-docker compose run --rm migrate
-```
-
-Re-run seed manually:
-```bash
-docker compose --profile seed run --rm seed
-```
-
 Open SQLite shell:
 ```bash
 docker compose exec app sqlite3 /app/data/taskline.db
 ```
+
+Re-seed (wipes and re-populates templates, projects, tasks):
+```bash
+docker compose down
+SEED_ON_START=true docker compose up -d --build
+```
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `APP_PORT` | `3000` | Host port mapped to container port 3000 |
+| `SEED_ON_START` | `false` | Set to `true` to populate DB with sample data on container start |
+| `DATABASE_URL` | `file:./data/taskline.db` | SQLite file path inside the container |
+| `JWT_SECRET` | (see `.env.example`) | Session signing key — change for production |
+
+See `.env.example` for the full list.
 
 ## Troubleshooting
 

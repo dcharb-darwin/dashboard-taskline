@@ -1,7 +1,7 @@
 # Documentation Index
 
 ## Product
-- `PRD-HANDOFF.md`: Product requirements and implementation handoff baseline.
+- `PRD.md`: Product Requirements Document — functional spec for the development team.
 
 ## Engineering
 - `REPO_CLEANUP_2026-02-24.md`: Repository audit, cleanup plan, execution log, and follow-up backlog.

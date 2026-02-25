@@ -23,6 +23,9 @@ RUN pnpm build
 # Production stage
 FROM node:22-alpine
 
+# Install native build tools for better-sqlite3
+RUN apk add --no-cache python3 make g++
+
 # Install pnpm
 RUN npm install -g pnpm@10.4.1
 
@@ -33,7 +36,7 @@ COPY package.json pnpm-lock.yaml ./
 COPY patches ./patches
 
 # Install full dependency set: runtime server imports vite and docker workflow runs drizzle tooling in-container
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile && npm rebuild better-sqlite3
 
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist

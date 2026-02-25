@@ -11,9 +11,9 @@ Fastest path to run Dashboard Taskline.
 
 ```bash
 cp .env.example .env
-docker compose up -d --build db migrate app
-# Optional sample data load
-docker compose --profile seed up -d --build seed
+docker compose up -d --build
+# Optional: rebuild with sample data
+SEED_ON_START=true docker compose up -d --build
 open http://localhost:3000
 ```
 

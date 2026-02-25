@@ -1,22 +1,47 @@
-# Darwin TaskLine — Product Requirements Document (PRD)
+# Darwin TaskLine — Product Requirements Document
 
 ## Document Control
 
 | Field | Value |
 |-------|-------|
-| Version | 2.0 |
-| Date | February 24, 2026 |
-| Product | Darwin TaskLine — Project & Task Management Micro-App |
-| Audience | Product, Design, Engineering, QA, Implementation Partner |
+| Version | 3.0 |
+| Date | February 25, 2026 |
+| Product | Darwin TaskLine — Project & Task Management |
+| Audience | Development Team, Product, QA |
 | Status | Approved for Development |
+
+---
+
+## How to Use This Document
+
+This PRD defines **what** Darwin TaskLine must do — not **how** to build it. A working prototype is provided as a running Docker container that demonstrates all core functionality. Use it as an interactive reference alongside this document.
+
+```bash
+# Run the demo
+docker compose up -d --build
+open http://localhost:3000
+```
+
+> [!IMPORTANT]
+> The prototype is a proof-of-concept built for speed, not production quality. Your team owns all technology choices, architecture, infrastructure, authentication, authorization enforcement, performance, accessibility, and deployment.
+
+### Priority Tiers
+
+Features are classified as:
+
+| Tier | Meaning |
+|------|---------|
+| **Core** | Must-have for v1 launch |
+| **Enhanced** | Nice-to-have — build if schedule permits |
+| **Future** | Out of scope for v1 — design for extensibility only |
 
 ---
 
 ## 1. Product Summary
 
-Darwin TaskLine is a white-label project and task management micro-app designed for template-based delivery tracking, timeline visualization, and portfolio reporting. It provides fast project setup through reusable templates, clear execution tracking across phases, and actionable drill-down from summary views to task-level detail.
+Darwin TaskLine is a white-label project and task management application for template-based delivery tracking, timeline visualization, and portfolio reporting. It enables fast project setup through reusable templates, clear execution tracking across phases, and actionable drill-down from summary views to task-level detail.
 
-The application supports customizable branding (organization name and logo) and is designed as an embeddable micro-app where user identity and authentication may be inherited from a host platform.
+The application supports customizable branding (organization name and logo) and is designed as an embeddable module where user identity may be inherited from a host platform.
 
 ---
 
@@ -25,25 +50,39 @@ The application supports customizable branding (organization name and logo) and 
 1. **Lightweight by default** — Minimal required fields, fast daily use.
 2. **Template-first** — Reuse through pre-defined project templates with phases and task libraries.
 3. **Actionable drill-down** — Every summary metric links to the detail behind it.
-4. **White-label ready** — Administrators customize branding without code changes.
+4. **White-label ready** — Branding customizable without code changes.
 5. **Cross-project visibility** — Tasks, calendar, and Gantt views span the full portfolio.
-6. **API-first** — All functionality must be accessible through a well-defined API surface.
-7. **AI-assistive readiness** — Design for future AI integrations (non-destructive, permission-aware).
+6. **API-first** — All functionality accessible through a well-defined API surface.
 
 ---
 
-## 3. Explicit Non-Goals (Out of Scope)
+## 3. Non-Goals (Out of Scope)
 
 1. ERP or financial system integration.
-2. Complex business rules engine or workflow automation.
-3. Enterprise portfolio governance beyond basic access policies.
-4. Local user management (signup, login, password lifecycle) — authentication is inherited.
-5. Deep resource/capacity optimization modules.
-6. Real-time multi-user collaboration (e.g., live cursors, co-editing).
+2. Complex workflow automation or business rules engine.
+3. Real-time multi-user collaboration (live cursors, co-editing).
+4. Deep resource/capacity optimization.
 
 ---
 
-## 4. Users and Roles
+## 4. Development Team Responsibilities
+
+The following areas are **not specified in this PRD** and are the development team's responsibility:
+
+| Area | Notes |
+|------|-------|
+| **Authentication** | SSO/OAuth integration with the host platform. The prototype uses a placeholder auth flow. |
+| **Authorization / RBAC** | Role enforcement on all API endpoints. Roles defined in §5 below. |
+| **Infrastructure** | Hosting, CI/CD, monitoring, logging, database selection, backup/recovery. |
+| **Performance** | Caching, pagination strategy, query optimization, CDN for assets. |
+| **Accessibility** | WCAG 2.1 AA compliance. |
+| **Internationalization** | If required by your deployment context. |
+| **Security** | Input sanitization, CSRF, rate limiting, secrets management. |
+| **Mobile responsiveness** | The prototype is desktop-first; responsive design is expected. |
+
+---
+
+## 5. Users and Roles
 
 Roles may be passed from a host platform or managed within the app.
 
@@ -51,96 +90,98 @@ Roles may be passed from a host platform or managed within the app.
 |------|------------|
 | **Viewer** | View dashboard, projects, tasks, timelines, and comments. Read-only. |
 | **Editor** | Update assigned tasks, add comments, update progress, create projects. |
-| **Admin** | All Editor permissions plus: manage templates, governance settings, notification configuration, branding, user access policies, and integration settings. |
+| **Admin** | All Editor permissions plus: manage templates, governance settings, notification configuration, branding, and user access policies. |
 
 ---
 
-## 5. Navigation and Application Shell
+## 6. Navigation and Application Shell — Core
 
-### 5.1 Global Navigation Bar
-The application must provide a persistent top navigation bar on all pages containing:
-- Organization logo (custom or default icon) and application name (both configurable via branding)
-- Navigation links to: Dashboard, Projects, Templates, Tasks, Calendar, Gantt, Admin
+### 6.1 Global Navigation Bar
+- Persistent top navigation on all pages
+- Organization logo (configurable) and application name (configurable)
+- Navigation links: Dashboard, Projects, Templates, Tasks, Calendar, Gantt, Admin
 - "New Project" action button
-- The logo and app name must link to the Dashboard
+- Logo and app name link to Dashboard
 
-### 5.2 Command Palette
-- Accessible via `Cmd+K` (macOS) or `Ctrl+K` (Windows/Linux) from any page
-- Provides quick navigation to any page, project, or action via keyboard search
-- Results must include all navigable pages and recent projects
+### 6.2 Command Palette
+- Accessible via `Cmd+K` / `Ctrl+K` from any page
+- Keyboard search across all pages, projects, and actions
 - Selected result navigates to the corresponding page
 
-### 5.3 Toast Notifications
-- Success, error, and informational messages must display as non-blocking toast notifications
-- Toasts must auto-dismiss after a reasonable duration
+### 6.3 Toast Notifications
+- Non-blocking toast messages for success, error, and informational feedback
+- Auto-dismiss after a reasonable duration
 
-### 5.4 Error Handling
-- A global error boundary must catch unhandled exceptions and display a user-friendly fallback
-- API errors must surface as toast messages with clear descriptions
+### 6.4 Error Handling
+- Global error boundary catches unhandled exceptions with a user-friendly fallback
+- API errors surface as toast messages with clear descriptions
 
 ---
 
-## 6. Dashboard
+## 7. Dashboard — Core
 
 The Dashboard is the landing page and provides a portfolio-level overview.
 
-### 6.1 Summary Metrics (KPI Cards)
-Display the following metrics as discrete cards:
+### 7.1 Summary Metrics (KPI Cards)
 
 | Metric | Description |
 |--------|-------------|
 | Total Projects | Count of all projects |
 | Total Tasks | Count of all tasks across all projects |
-| Completed Tasks | Count of tasks with status "Complete" and completion rate percentage |
-| Upcoming Deadlines | Count of tasks due within the next 14 days |
+| Completed Tasks | Count + completion rate percentage |
+| Upcoming Deadlines | Count of tasks due within 14 days |
 
-### 6.2 Portfolio Health
-- **Health distribution**: Count of projects categorized as On Track / At Risk / Off Track
-- **Average completion**: Mean completion percentage across all projects
-- **Milestone confidence**: Count of projects with High / Medium / Low milestone confidence
+Each card must be clickable and navigate to a relevant filtered view.
 
-### 6.3 Top Risks
-- List of projects with the most overdue tasks and blocked items
-- Each entry must show project name, health status, overdue count, and blocked count
-- Clicking a project must navigate to its detail page
+### 7.2 Portfolio Health
+- Health distribution: On Track / At Risk / Off Track project counts
+- Average completion percentage across all projects
+- Milestone confidence: High / Medium / Low counts
 
-### 6.4 Upcoming Deadlines
-- List of tasks due within the next 14 days
-- Each entry must show task description, project name (with phase context), due date, owner, priority, and status
-- Clicking a task must navigate to its project detail page with the task highlighted
+### 7.3 Top Risks
+- Projects with the most overdue and blocked tasks
+- Each entry: project name, health status, overdue count, blocked count
+- Clickable → navigates to project detail
 
-### 6.5 Recent Activity
-- List of the most recent project activities across all projects
-- Each entry must show timestamp, project name, event type, and description
+### 7.4 Upcoming Deadlines
+- Tasks due within 14 days
+- Each entry: task description, project name, phase, due date, owner, priority, status
+- Clickable → navigates to project detail with task highlighted
 
-### 6.6 Budget Summary
-- Total planned budget vs. actual spend across all projects
+### 7.5 Recent Activity
+- Most recent project activities across all projects
+- Each entry: timestamp, project name, event type, description
+
+### 7.6 Budget Summary
+- Total planned budget vs. actual spend
 - Budget utilization percentage
 
 ---
 
-## 7. Template Management
+## 8. Template Management — Core
 
-### 7.1 Template Library
-- Browse all templates with search and filtering
+### 8.1 Template Library
+- Browse templates with search and filtering
 - Filter by status: All, Draft, Published, Archived
 - Filter by template group
-- Display template name, group, version, task count, status, and last updated date
-- Only "Published" templates are available for project creation
+- Display: name, group, version, task count, status, last updated
+- Only Published templates available for project creation
 
-### 7.2 Template Data Model
-Each template must store:
-- **Name** — Display name
-- **Template Key** — Unique identifier string
-- **Template Group Key** — Category grouping (e.g., "Marketing", "Planning", "Event")
-- **Version** — Integer version number
-- **Status** — Draft | Published | Archived
-- **Description** — Optional text description
-- **Phases** — Ordered list of phase names (e.g., "Phase 1: Concept & Planning", "Phase 2: Logistics")
-- **Sample Tasks** — Array of task definitions (see section 7.3)
-- **Upload Source** — Origin of template data ("manual", "xlsx", etc.)
+### 8.2 Template Data Model
 
-### 7.3 Template Task Definition
+| Field | Type | Required |
+|-------|------|----------|
+| Name | String | Yes |
+| Template Key | String | Yes (unique identifier) |
+| Template Group Key | String | Yes (category grouping) |
+| Version | Integer | Yes |
+| Status | Enum: Draft, Published, Archived | Yes |
+| Description | Text | No |
+| Phases | Ordered list of phase names | Yes |
+| Sample Tasks | Array of task definitions (see §8.3) | No |
+| Upload Source | String ("manual", "xlsx", etc.) | No |
+
+### 8.3 Template Task Definition
 Each sample task within a template includes:
 - Task ID code (e.g., "T001")
 - Description (required)
@@ -149,119 +190,107 @@ Each sample task within a template includes:
 - Duration in days
 - Owner role
 - Dependencies (list of task ID codes)
-- Approval required flag
-- Approver role
+- Approval required flag and approver role
 - Deliverable type
 - Milestone name (optional)
 
-### 7.4 Template Lifecycle
-- **Create**: New template with phases and task library
-- **Edit**: Modify template metadata, phases, and task definitions
-- **Duplicate**: Copy template to create a variant
-- **Publish**: Make template available for project creation
-- **Archive**: Remove template from active use (retain for audit)
-- **Version**: Increment version number on significant changes
+### 8.4 Template Lifecycle
+- **Create** — New template with phases and task library
+- **Edit** — Modify metadata, phases, and task definitions
+- **Duplicate** — Copy to create a variant
+- **Publish** — Make available for project creation
+- **Archive** — Remove from active use (retain for audit)
+- **Version** — Increment version on significant changes
 - Template changes apply to future projects only; existing projects are unaffected
 
-### 7.5 Template Validation
+### 8.5 Template Validation
 - No duplicate task IDs within a template
-- No self-dependency (task cannot depend on itself)
+- No self-dependency
 - No dependency on unknown task IDs
 - At least one task must have a description
 
 ---
 
-## 8. Project Management
+## 9. Project Management — Core
 
-### 8.1 Project Creation
+### 9.1 Project Creation
 - Create from a published template (pre-populates phases and tasks) or as a blank project
-- Template selection shows published templates with search/filter
-- Project creation form fields:
-  - Name (required)
-  - Description
-  - Template type (auto-filled from selected template)
-  - Project manager
-  - Start date
-  - Target completion date
-  - Budget (monetary value)
-- Date validation: target completion date must be after start date
-- Template-based creation auto-generates all tasks from the template's task library with auto-generated sequential task IDs
+- Template selection with search/filter
+- Form fields: Name (required), Description, Template type (auto-filled), Project manager, Start date, Target completion date, Budget
+- Date validation: target completion ≥ start date
+- Template-based creation auto-generates all tasks with sequential IDs
 
-### 8.2 Project List View
-- Display all projects with: name, template type, status, start date, target completion date, completion percentage, and task count
+### 9.2 Project List
+- Display: name, template type, status, dates, completion %, task count
 - Filter by status: All, Planning, Active, On Hold, Complete
-- Search by project name
-- Sort by various fields
-- Click a project to navigate to its detail page
+- Search by name, sort by various fields
+- Click → navigate to project detail
 
-### 8.3 Project Data Model
-Each project must store:
-- Name, description
-- Template reference (optional) and template type
-- Project manager
-- Start date and target completion date
-- Planned budget and actual budget (monetary values stored in cents)
-- Status: Planning | Active | On Hold | Complete
-- Timestamps (created, updated)
+### 9.3 Project Data Model
 
-### 8.4 Project Detail Page
-The project detail page is the primary workspace and must include these sections:
+| Field | Type | Required |
+|-------|------|----------|
+| Name | String | Yes |
+| Description | Text | No |
+| Template Reference | Foreign key | No |
+| Template Type | String | No |
+| Project Manager | String | No |
+| Start Date | Date | No |
+| Target Completion Date | Date | No |
+| Planned Budget | Currency (cents) | No |
+| Actual Budget | Currency (cents) | No |
+| Status | Enum: Planning, Active, On Hold, Complete | Yes |
 
-#### 8.4.1 Project Header
-- Project name, template type, and status
-- Edit and delete actions (with confirmation for delete)
-- Project metadata: manager, dates, budget, completion percentage, task counts
+### 9.4 Project Detail Page
 
-#### 8.4.2 Task List
-- Display all tasks for the project grouped by configurable criteria
-- **Group by options**: Status (default), Phase
-- **Phase grouping with collapsible sections**: When grouped by phase, each phase section is collapsible and shows the phase name with task count
-- Each task row must display: task ID code, description, phase, status, priority, owner, due date, completion %, planned/actual budget
-- **Clickable rows**: Clicking anywhere on a task row opens the edit dialog (excluding checkbox and action buttons)
-- Task selection checkboxes for bulk operations
-- Add Task button
+The project detail page is the primary workspace with these sections:
 
-#### 8.4.3 Bulk Task Operations
-- Select multiple tasks via checkboxes or "Select Visible" action
-- Bulk edit supports: owner, status, priority, phase, start date, due date, completion %, planned budget, actual budget
-- "Validate Dependencies" action checks all selected tasks for unmet dependency conditions
+#### Project Header
+- Name, template type, status badge
+- Edit and delete actions (delete requires confirmation)
+- Metadata: manager, dates, budget, completion %, task counts
 
-#### 8.4.4 Risk Register
-- Add, view, and manage project risks
-- Each risk has: title, description, probability (1-5), impact (1-5), risk score (probability × impact), status, mitigation plan, owner, linked task
-- Risk statuses: Open, Mitigated, Accepted, Closed
-- Display risks sorted by score (highest first)
+#### Task List
+- All tasks grouped by configurable criteria (Status default, or Phase)
+- Phase grouping: collapsible sections with phase name and task count
+- Each row: task ID, description, phase, status, priority, owner, due date, completion %, budget
+- Clickable rows open edit dialog
+- Checkboxes for bulk selection
 
-#### 8.4.5 Project Tags
-- Add lightweight labels/tags to categorize projects
-- Each tag has a label and a color
-- Tags are displayed as colored chips
+#### Bulk Task Operations
+- Select via checkboxes or "Select Visible"
+- Bulk edit: owner, status, priority, phase, dates, completion %, budgets
+- "Validate Dependencies" checks selected tasks for unmet dependency conditions
 
-#### 8.4.6 Project Notes / Journal
+#### Project Tags
+- Lightweight labels/tags to categorize projects
+- Each tag: label + color
+- Displayed as colored chips
+
+#### Project Notes / Journal
 - Append-only journal entries per project
-- Each note has author, content, and timestamp
-- Notes are displayed in reverse chronological order
+- Each note: author, content, timestamp
+- Displayed in reverse chronological order
 
-#### 8.4.7 Activity Feed
-- Unified timeline of project activities
-- Activity types: comment added, task status changed, task assignment changed, due soon, overdue
-- Each entry has actor, event type, summary, and timestamp
+#### Activity Feed
+- Unified timeline of project events
+- Event types: comment added, task status changed, assignment changed, due soon, overdue
+- Each entry: actor, event type, summary, timestamp
 
-#### 8.4.8 Comments
-- Threaded comments on the project with @mention support
+#### Comments
+- Threaded comments with @mention support
 - Comments can optionally be associated with a specific task
-- Display author, content, mentions, and timestamp
+- Display: author, content, mentions, timestamp
 
 ---
 
-## 9. Task Management
+## 10. Task Management — Core
 
-### 9.1 Task Data Model
-Each task must store:
+### 10.1 Task Data Model
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| Task ID Code | String | Auto-generated | Sequential (T001, T002, ...), unique within project |
+| Task ID Code | String | Auto-generated | Sequential (T001, T002...), unique within project |
 | Description | String | Yes | |
 | Project | Reference | Yes | Parent project |
 | Phase | String | No | Must match a project/template phase |
@@ -281,293 +310,300 @@ Each task must store:
 | Deliverable Type | String | No | |
 | Notes | Text | No | |
 
-### 9.2 Task Creation
-- Add tasks from project detail page
-- Option to select from template's task library or create freeform
-- Task ID codes auto-generate sequentially (T001, T002, ...) and must avoid collisions with existing tasks
+### 10.2 Task Creation
+- Add from project detail page
+- Option to select from template task library or create freeform
+- Task IDs auto-generate sequentially, avoid collisions
 
-### 9.3 Task Editing
-- Edit all task fields via a dialog/modal
-- Inline editing via clicking any task row (opens edit dialog)
-- Dedicated pencil icon also opens edit dialog
+### 10.3 Task Editing
+- Edit all fields via dialog/modal
+- Inline editing via clicking any task row
+- Dedicated edit icon also available
 
-### 9.4 Task Validation
-- Description is required
-- Due date cannot be earlier than start date
-- Completion % must be between 0 and 100
-- Budget values must be non-negative
-- Setting status to "Complete" should enforce 100% completion
-- Setting completion to 100% should suggest status change to "Complete"
+### 10.4 Task Validation
+- Description required
+- Due date ≥ start date
+- Completion % between 0 and 100
+- Budget values non-negative
+- Setting status to "Complete" → enforce 100% completion
+- Setting completion to 100% → suggest status change to "Complete"
 
-### 9.5 Task Dependency Management
-- Tasks can declare dependencies on other tasks (by task ID code)
+### 10.5 Dependency Management
+- Tasks declare dependencies on other tasks by ID code
 - Visual dependency picker showing available tasks
-- Dependency validation: warn when completing a task whose dependencies are not yet complete
-- "Validate Dependencies" bulk action checks readiness of selected tasks
+- Warning when completing a task with incomplete dependencies
+- Bulk "Validate Dependencies" action
 
-### 9.6 Task Notes
+### 10.6 Task Notes
 - Append-only notes/journal per task
-- Each note has author, content, and timestamp
+- Each note: author, content, timestamp
+
+### 10.7 Task Slide-Out Panel
+- Triggered from Gantt bar click or cross-project Tasks page
+- Inline editing of key fields (status, priority, owner, completion %, dates, notes)
+- "Go to Project" link for full context
+- Task notes journal embedded in panel
 
 ---
 
-## 10. Cross-Project Tasks View
+## 11. Cross-Project Tasks View — Core
 
 A dedicated "Tasks" page provides a unified view of all tasks across all projects.
 
-### 10.1 Filtering
-- Filter by status: All, Not Started, In Progress, Complete, On Hold
-- Filter by priority: All, High, Medium, Low
-- Filter by owner: All, or specific owner name
+### 11.1 Filtering
+- By status, priority, owner
 - Text search across task descriptions
 
-### 10.2 Grouping
-Tasks can be grouped by any of the following axes:
-- **Status** (default) — Groups tasks under status headers
-- **Phase** — Groups tasks under project-scoped phase headers (format: "Project Name → Phase Name")
-- **Project** — Groups tasks under project name headers
-- **Priority** — Groups tasks under priority headers
-- **Owner** — Groups tasks under owner name headers
+### 11.2 Grouping
+Tasks can be grouped by:
+- **Status** (default)
+- **Phase** — grouped as "Project Name → Phase Name"
+- **Project**
+- **Priority**
+- **Owner**
 
-### 10.3 Sorting
-Within each group, tasks can be sorted by:
-- Due Date (default)
-- Priority
-- Status
-- Phase (alphabetical within project)
+### 11.3 Sorting
+Within each group, sort by: Due Date (default), Priority, Status, Phase
 
-### 10.4 Task Display
-Each task row must show:
-- Task ID code and description
-- Phase badge (with project name context)
-- Status badge with color coding
-- Priority indicator with color coding
-- Owner
-- Due date
-- Completion percentage
-- Clicking a task navigates to its project detail page with the task highlighted
+### 11.4 Bulk Operations
+- Select multiple tasks via checkboxes
+- Bulk status change
+- "Select All" visible tasks
+
+### 11.5 Task Interaction
+- Clicking a task opens the slide-out panel for inline editing
+- Link to navigate to full project detail
 
 ---
 
-## 11. Calendar View
+## 12. Calendar View — Core
 
-### 11.1 View Modes
+### 12.1 View Modes
 - Month, week, and day views
-- Navigate forward/back and return to "Today"
+- Navigate forward/back and "Today" button
 
-### 11.2 Projects/Tasks Toggle
-- **Projects mode** (default): Shows project schedule windows as time-range events
-- **Tasks mode**: Shows individual tasks as events, color-coded by their project phase
+### 12.2 Projects/Tasks Toggle
+- **Projects mode** (default): Project schedule windows as time-range events
+- **Tasks mode**: Individual tasks as events, color-coded by project phase
 
-### 11.3 Event Display
-- Project events show project name and status
-- Task events show task description, project name, phase name, and owner
-- Color coding differentiates phases/projects
-
-### 11.4 Interaction
-- Clicking a project event navigates to the project detail page
-- Clicking a task event navigates to the project detail page with the task highlighted
+### 12.3 Interaction
+- Clicking a project event → navigates to project detail
+- Clicking a task event → navigates to project detail with task highlighted
 
 ---
 
-## 12. Gantt Chart View
+## 13. Gantt Chart — Core
 
-### 12.1 Timeline Display
-- Interactive horizontal timeline with project bars, phase bars, and task bars
-- Hierarchical: Projects > Phases > Tasks (collapsible/expandable)
+### 13.1 Timeline Display
+- Interactive horizontal timeline: Projects > Phases > Tasks (collapsible hierarchy)
 - View mode options: Day, Week, Month
-- Auto-scroll to the earliest upcoming date
+- Auto-scroll to earliest upcoming date
 
-### 12.2 Visual Indicators
-- Tasks with inferred dates (no explicit dates set) must be visually distinguished
-- Date inference count must be displayed to users
-- Critical path tasks (if identified) must be visually highlighted
+### 13.2 Visual Indicators
+- Tasks with inferred dates (no explicit dates) visually distinguished
+- Inferred date count displayed to users
 
-### 12.3 Drill-Down Navigation
-- Clicking a project bar navigates to the project detail page
-- Clicking a phase bar navigates to the project detail page with `?phase=PhaseName` context
-- Clicking a task bar navigates to the project detail page with `?task=TaskId` context (task highlighted)
+### 13.3 Drill-Down
+- Clicking a project bar → project detail
+- Clicking a phase bar → project detail with `?phase=PhaseName`
+- Clicking a task bar → opens slide-out panel for inline editing
 
-### 12.4 Task List Panel
-- Left-side panel showing task/project names with expand/collapse functionality
-- Column width configurable per view mode
+### 13.4 Left Panel
+- Task/project names with expand/collapse
 
 ---
 
-## 13. Admin Settings
+## 14. Admin Settings — Core
 
-The Admin page provides system-wide configuration organized in tabs.
+### 14.1 Branding Tab
+- **Application Name**: Text input — displayed in nav bar, browser title, exports (default: "Darwin TaskLine")
+- **Organization Logo**: Image upload (PNG, JPG, SVG, max 2MB) with drag-and-drop, preview, change, and remove
+- Changes propagate immediately across all pages without reload
 
-### 13.1 Governance & Access Tab
-- **User Access Policies**: Add, view, and manage user role assignments
-  - Each policy maps a user identifier to a role (Admin / Editor / Viewer)
-  - Display current policies in a table
-  - Add new policies with user ID and role selection
-- **Audit Log**: Paginated, filterable list of all governance actions
-  - Each entry shows: timestamp, entity type, entity ID, action, actor name, details
-  - Entity types: project, task, template, integration, webhook, user_access
-
-### 13.2 Notifications Tab
-- **Notification Preferences**: Configure delivery channels per scope
-  - Scope types: user, team
-  - Channels: In-App, Email, Slack, Webhook (with URL)
-  - Event toggles: Overdue, Due Soon, Assignment, Status Change
-  - Each preference can independently enable/disable channels and events
-- **Webhook Subscriptions**: Manage outbound webhook endpoints
-  - Each subscription: name, endpoint URL, subscribed events, secret, active/inactive status
-  - Event types: project.created, project.updated, project.deleted, task.created, task.updated, task.deleted, template.created, template.updated, template.published, template.archived, integration.external_event
-- **Recent Notifications**: View recent notification events with type, project, title, message, channels, and timestamp
-
-### 13.3 Branding Tab
-- **Application Name**: Text input to customize the display name shown in navigation bar, browser tab/title, and exports (default: "Darwin TaskLine")
-- **Organization Logo**: Image upload for custom logo
-  - Supports click-to-upload and drag-and-drop
-  - Accepted formats: PNG, JPG, SVG
-  - Maximum file size: 2MB
-  - Preview of uploaded logo with change and remove actions
-- **Save/Reset**: Save changes or reset to current values
-- Branding changes must propagate immediately to all parts of the application without page reload
+### 14.2 Notifications Tab
+- **Notification Preferences**: Per user/team delivery channels (In-App, Email, Slack, Webhook) and event toggles (Overdue, Due Soon, Assignment, Status Change)
+- **Webhook Subscriptions**: Outbound endpoints with event selection, secret, and active/inactive toggle
+- **Recent Notifications**: View recent events with type, project, title, message, channels, timestamp
 
 ---
 
-## 14. Data Export
+## 15. Risk Register — Enhanced
 
-### 14.1 Excel Export
+> [!NOTE]
+> Risk management is **nice-to-have**. Include if schedule permits.
+
+### 15.1 Risk Data Model
+
+| Field | Type |
+|-------|------|
+| Title | String (required) |
+| Description | Text |
+| Probability | Integer 1–5 |
+| Impact | Integer 1–5 |
+| Risk Score | Computed: probability × impact |
+| Status | Enum: Open, Mitigated, Accepted, Closed |
+| Mitigation Plan | Text |
+| Owner | String |
+| Linked Task | Reference (optional) |
+
+### 15.2 Behavior
+- Managed per project on the project detail page
+- Sorted by risk score (highest first)
+- Create, edit, delete via inline forms
+
+---
+
+## 16. Governance — Enhanced
+
+> [!NOTE]
+> Governance features are **nice-to-have**.
+
+### 16.1 User Access Policies
+- Map user identifiers to roles (Admin / Editor / Viewer)
+- Display as a table with add/remove actions
+
+### 16.2 Audit Log
+- Paginated, filterable list of all critical lifecycle actions
+- Entity types: project, task, template, integration, webhook, user_access
+- Each entry: timestamp, entity type, entity ID, action, actor, details
+
+---
+
+## 17. Data Export — Core
+
+### 17.1 Excel Export
 - Export project and task data as a formatted spreadsheet
-- Workbook must include the branding name as the creator
+- Workbook creator name uses the configured branding name
 - Include project metadata and task detail sheets
 
 ---
 
-## 15. Data Entities Summary
+## 18. Business Rules
 
-The application requires the following data entities:
+### 18.1 Task Status Workflow
+- Status → "Complete" enforces completion % = 100%
+- Status → "Not Started" enforces completion % = 0%
+- Completion % set to 100% → prompt to change status to "Complete"
 
-| Entity | Description |
-|--------|-------------|
-| Users | User identity (SSO/OAuth), name, email, role |
-| Templates | Reusable project templates with phases and task library |
-| Projects | Project instances with lifecycle, dates, budget, status |
-| Tasks | Individual work items within projects |
-| Task Notes | Append-only journal entries per task |
-| Project Notes | Append-only journal entries per project |
-| Project Comments | Threaded discussion with @mention support |
-| Project Activities | Immutable timeline of project events |
-| Notification Preferences | Delivery channel and event toggle configuration |
-| Notification Events | Generated alert/notification records |
-| Audit Logs | Immutable governance record of all critical actions |
-| Webhook Subscriptions | Outbound integration endpoint configuration |
-| User Access Policies | Role-based access control mappings |
-| App Settings | Key-value configuration store (branding, etc.) |
-| Project Risks | Risk register entries with scoring |
-| Project Tags | Labeled color-coded categorization chips |
-| Saved Views | Named filter/sort presets for task views |
+### 18.2 Project Date Enforcement
+- Target completion date ≥ start date
+- Tasks with due dates beyond project target → warning (not hard block)
+
+### 18.3 Dependency Enforcement
+- Completing a task with incomplete dependencies → display warning
+- "Validate Dependencies" action reports all unmet dependencies
+
+### 18.4 Template-to-Project Flow
+- Template selection pre-populates all tasks with new sequential IDs
+- Task dates may offset from project start date based on template durations
+- Template modifications do not affect existing projects
+
+### 18.5 Governance Events
+- All create/update/delete operations on projects, tasks, templates → audit log entries
+- Webhook subscriptions triggered for matching events
+- Activity feed entries for status changes, assignment changes, comments
 
 ---
 
-## 16. API Requirements
+## 19. Data Entities Summary
 
-### 16.1 API Surface
-All data entities listed in section 15 must have corresponding API endpoints supporting CRUD operations where applicable. Specifically:
+| Entity | Description | Tier |
+|--------|-------------|------|
+| Templates | Reusable project templates with phases and task library | Core |
+| Projects | Project instances with lifecycle, dates, budget, status | Core |
+| Tasks | Individual work items within projects | Core |
+| Task Notes | Append-only journal entries per task | Core |
+| Project Notes | Append-only journal entries per project | Core |
+| Project Comments | Threaded discussion with @mention support | Core |
+| Project Activities | Immutable timeline of project events | Core |
+| Project Tags | Labeled color-coded categorization chips | Core |
+| App Settings | Key-value config (branding, etc.) | Core |
+| Notification Preferences | Delivery channel and event toggle config | Core |
+| Notification Events | Generated alert/notification records | Core |
+| Webhook Subscriptions | Outbound integration endpoints | Core |
+| Project Risks | Risk register entries with scoring | Enhanced |
+| User Access Policies | Role-based access control mappings | Enhanced |
+| Audit Logs | Immutable governance record | Enhanced |
+| Saved Views | Named filter/sort presets for task views | Future |
+| Users | User identity — owned by host platform / auth layer | Dev Team |
 
-- **Templates**: List (with status/group filters), Get, Create, Update, Delete
-- **Projects**: List (with status filter), Get, Create, Update, Delete
+---
+
+## 20. API Requirements
+
+### 20.1 API Surface
+All data entities in §19 must have corresponding API endpoints supporting CRUD operations. Key operations:
+
+- **Templates**: List (filter by status/group), Get, Create, Update, Delete
+- **Projects**: List (filter by status), Get, Create, Update, Delete
 - **Tasks**: List by project, List all (cross-project), Get, Create, Update, Delete, Bulk Update
 - **Comments**: List by project, Create
 - **Activities**: List by project
-- **Notifications**: List preferences, Update preferences, List events
+- **Notifications**: List/Update preferences, List events
 - **Webhooks**: List, Create, Update, Delete
-- **User Access**: List policies, Add policy
-- **Audit Logs**: List (with pagination and filtering)
 - **Branding**: Get, Update
-- **Risks**: List by project, Create, Update, Delete
+- **Risks**: List by project, Create, Update, Delete *(Enhanced)*
 - **Tags**: List by project, Create, Delete
 - **Notes**: List by project/task, Create
-- **Saved Views**: List, Create, Delete
-- **Calendar**: API to return project and task events for date ranges
-- **Gantt**: API to return hierarchical timeline data for all projects
-- **Dashboard**: API to return portfolio summary, health, risk, and deadline data
+- **Dashboard**: Portfolio summary, health, risk, and deadline data
+- **Calendar**: Project and task events for date ranges
+- **Gantt**: Hierarchical timeline data for all projects
 
-### 16.2 API Validation
-- API validation must match UI validation behavior exactly
-- Required fields, date range checks, and enum constraints must be enforced server-side
+### 20.2 API Validation
+- Must match UI validation rules exactly (required fields, date ranges, enums)
 
-### 16.3 API Authorization
-- API must enforce role-based access per section 4
-- Authentication via host-platform identity (OAuth/SSO)
+### 20.3 API Authorization
+- Enforce role-based access per §5
+- Authentication mechanism is the development team's decision
 
 ---
 
-## 17. Business Rules and Workflow Guardrails
+## 21. AI / Agentic Readiness — Future
 
-### 17.1 Task Status Workflow
-- When status is set to "Complete", completion % must be set to 100%
-- When status is set to "Not Started", completion % must be set to 0%
-- When completion % is manually set to 100%, prompt user to change status to "Complete"
+> [!NOTE]
+> AI features are **future scope**. Design the data model and API to support these use cases, but do not implement them in v1.
 
-### 17.2 Project Date Enforcement
-- Target completion date must be on or after start date
-- Tasks should not have due dates beyond the project's target completion date (warning, not hard block)
+Potential use cases to design for:
+1. **Task breakdown suggestion** — Given a project brief, suggest a task list
+2. **Risk summarization** — Summarize blockers and overdue items across a portfolio
+3. **Status Q&A** — Natural-language queries about project/task status
+4. **Remediation suggestions** — Suggest next steps for overdue tasks
 
-### 17.3 Dependency Enforcement
-- When attempting to complete a task with incomplete dependencies, display a warning
-- "Validate Dependencies" action must check all selected tasks and report unmet dependencies
-
-### 17.4 Template-to-Project Flow
-- When creating a project from a template, all sample tasks are instantiated with new sequential IDs
-- Task dates may be offset from the project start date based on template duration definitions
-- Template modifications do not retroactively affect existing projects
-
-### 17.5 Governance Events
-- All create, update, and delete operations on projects, tasks, and templates must generate audit log entries
-- Webhook subscriptions must be triggered for matching events
-- Activity feed entries must be generated for task status changes, assignment changes, and comments
+Design constraints:
+- Any AI-proposed write action requires explicit user confirmation
+- AI actions must be permission-aware and role-compliant
+- AI output must be editable before save
 
 ---
 
-## 18. AI / Agentic Readiness
+## 22. Future Integrations (Not in v1)
 
-AI features are optional and assistive. Design the system to support:
-
-1. Suggesting task breakdown from a project brief or description
-2. Summarizing project risk and blockers
-3. Suggesting remediation actions for overdue tasks
-4. Natural-language retrieval of project/task status
-5. Any write action proposed by AI requires explicit user confirmation
-6. AI actions must be permission-aware and role-compliant
-7. AI output must be editable before save
-
----
-
-## 19. Future Integrations (Not in Current Scope)
-
-The following must be considered in architecture but not implemented:
+Design extensibility hooks but do not implement:
 
 1. **O365 Calendar** — Link Outlook events to projects/tasks
 2. **SharePoint** — Link documents/list items to project context
 3. **Generic Connectors** — Framework for third-party data sources
-4. **Integration Governance** — Connector permissions, source attribution, conflict handling
+4. **Integration Governance** — Connector-level permissions, source attribution, conflict resolution
 
 ---
 
-## 20. Acceptance Criteria
+## 23. Acceptance Criteria
 
-1. A new user can create a project from a published template and have all tasks pre-populated within 60 seconds.
-2. Template task library is editable and persistent for future project creation.
-3. Dashboard metrics are accurate and link to actionable detail views.
-4. Calendar and Gantt views display project and task data correctly, including edge cases with missing dates.
-5. Gantt remains functional with incomplete task dates by inferring a timeline (with visual disclosure).
-6. Tasks can be created, edited, and bulk-updated without runtime errors.
-7. Cross-project Tasks page correctly groups and sorts tasks across all projects.
-8. Admin branding changes (name and logo) propagate immediately across all pages without reload.
-9. Audit log captures all critical lifecycle actions.
-10. Notification preferences correctly control event delivery channels.
+1. Users can create a project from a published template with pre-populated tasks within 60 seconds.
+2. Template task library is editable and persistent for future use.
+3. Dashboard metrics are accurate and link to actionable detail.
+4. Calendar and Gantt display project/task data correctly, including missing-date edge cases.
+5. Gantt remains functional with incomplete dates by inferring a timeline (visually disclosed).
+6. Tasks can be created, edited, and bulk-updated without errors.
+7. Cross-project Tasks page correctly groups and sorts across all projects.
+8. Slide-out panel allows inline task editing from Gantt and Tasks pages.
+9. Admin branding changes propagate immediately without reload.
+10. Excel export produces a complete, formatted workbook.
 11. Role-based access is enforced on all API endpoints.
-12. Excel export produces a complete, formatted workbook.
 
 ---
 
-## 21. Success Metrics
+## 24. Success Metrics
 
 | Metric | Target |
 |--------|--------|
@@ -580,12 +616,48 @@ The following must be considered in architecture but not implemented:
 
 ---
 
-## 22. Open Decisions for Build Partner
+## 25. Open Decisions for Development Team
 
-1. Final role mapping from host-platform identity claims to application permissions.
-2. Export format preferences beyond Excel (PDF, CSV, etc.).
-3. Notification delivery integration details (email provider, Slack workspace config).
-4. Logo storage approach (cloud object storage vs. inline data URI vs. CDN).
-5. AI feature rollout order and provider selection.
-6. Saved view sharing scope (personal vs. team-wide).
-7. Real-time update strategy (polling interval vs. WebSocket/SSE for live data).
+1. Authentication and identity provider integration approach.
+2. Role mapping from host-platform identity claims to app permissions.
+3. Export format preferences beyond Excel (PDF, CSV, etc.).
+4. Notification delivery integration (email provider, Slack config).
+5. Logo storage approach (object storage, CDN, inline data URI).
+6. Real-time update strategy (polling vs. WebSocket/SSE).
+7. Saved view sharing scope (personal vs. team).
+
+---
+
+## Appendix: Demo Feature Matrix
+
+| Feature | Page/Component | Status |
+|---------|---------------|--------|
+| Global nav bar with branding | AppLayout | ✅ In Demo |
+| Command palette (Cmd+K) | CommandPalette | ✅ In Demo |
+| Dashboard KPIs, health, risks, deadlines | Dashboard | ✅ In Demo |
+| Project list with filters | Projects | ✅ In Demo |
+| Project creation from template | CreateProject | ✅ In Demo |
+| Project detail (header, tasks, bulk ops) | ProjectDetail | ✅ In Demo |
+| Task add/edit dialogs | AddTaskDialog, EditTaskDialog | ✅ In Demo |
+| Task dependency picker | DependencyPicker | ✅ In Demo |
+| Bulk task operations | ProjectDetail | ✅ In Demo |
+| Project tags | ProjectTagChips | ✅ In Demo |
+| Project notes / journal | NotesJournal | ✅ In Demo |
+| Task notes / journal | NotesJournal + TaskSlideOutPanel | ✅ In Demo |
+| Activity feed & comments | UnifiedActivityFeed | ✅ In Demo |
+| Cross-project Tasks view | Tasks | ✅ In Demo |
+| Task slide-out panel | TaskSlideOutPanel | ✅ In Demo |
+| Calendar (projects/tasks toggle) | Calendar | ✅ In Demo |
+| Gantt chart with drill-down | GanttChart | ✅ In Demo |
+| Template library (CRUD, publish, archive) | Templates | ✅ In Demo |
+| Admin: Branding tab | AdminSettings | ✅ In Demo |
+| Admin: Notifications & webhooks | AdminSettings | ✅ In Demo |
+| Excel export | excelExport | ✅ In Demo |
+| Risk register | ProjectRisks | ✅ In Demo |
+| Admin: Governance & access policies | AdminSettings | ✅ In Demo |
+| Audit log | AdminSettings | ✅ In Demo |
+| Error boundary | ErrorBoundary | ✅ In Demo |
+| Saved views UI | — | 📋 Spec Only |
+| Webhook delivery (outbound calls) | — | 📋 Spec Only |
+| RBAC enforcement on API | — | 📋 Spec Only |
+| Authentication flow | — | 🔧 Dev Team |
