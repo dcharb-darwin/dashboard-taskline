@@ -231,7 +231,7 @@ erDiagram
 
 - **Timestamps**: Unix epoch integers (seconds since 1970)
 - **Currency**: Stored as integers in cents ($125.50 → `12550`)
-- **Enums**: Stored as text with validation at the Zod schema layer
+- **Enums**: Stored as text. Project/task statuses, priorities, and risk statuses are configurable via Admin → Statuses & Labels tab. Defaults are defined in `shared/enums.ts` and seeded into `app_settings`. Validation at the Zod schema layer uses `z.string()` for configurable fields.
 - **JSON fields**: Stored as text, parsed by application code
 - **IDs**: Auto-increment integers (SQLite `integer primary key`)
 
@@ -313,6 +313,10 @@ graph TB
         XL["excelExport.ts<br/>XLSX generation"]
     end
 
+    subgraph "Shared Layer"
+        EN["shared/enums.ts<br/>Types, defaults, color maps"]
+    end
+
     I --> TRPC
     I --> OAUTH
     I --> VITE
@@ -321,6 +325,8 @@ graph TB
     R --> XL
     R --> NOTIF
     R --> SDK
+    R --> EN
+    DB --> EN
 ```
 
 ### Module Sizes (complexity indicators)
@@ -341,7 +347,8 @@ graph TB
 graph TB
     APP["App.tsx"]
     APP --> TP["ThemeProvider"]
-    TP --> TT["TooltipProvider"]
+    TP --> EP["EnumProvider<br/>(useEnums hook)"]
+    EP --> TT["TooltipProvider"]
     TT --> TOAST["Toaster (sonner)"]
     TT --> ROUTER["Router (wouter)"]
 
@@ -492,6 +499,7 @@ flowchart LR
 | Tags | `tags.add` / `tags.remove` | Companion → TaskLine | Visual status indicators |
 | Webhooks | `webhook_subscriptions` | TaskLine → Companion | Event-driven notifications with entity snapshots |
 | Closeout status | `projects.status = "Closeout"` | Bidirectional | Administrative wind-down phase |
+| Configurable Enums | `enums.list` / `enums.update` | Admin → TaskLine | Dynamic status/priority/risk options |
 
 See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for implementation details and code examples.
 
@@ -541,4 +549,4 @@ These are known structural improvements tracked for future work:
 | `server/db.ts` (2,100 lines) | Domain repositories: `projectRepo.ts`, `taskRepo.ts`, `templateRepo.ts`, etc. | Reduce change risk, enable focused testing |
 | `server/routers.ts` (1,600 lines) | Feature routers: `projectRouter.ts`, `taskRouter.ts`, `templateRouter.ts`, composed in `routers.ts` | Smaller review surface per feature |
 | `ProjectDetail.tsx` (1,226 lines) | Container + section components: `ProjectInfo`, `TaskTable`, `ActivityFeed`, `RiskRegister` | Reduce cognitive load, enable lazy loading |
-| Hardcoded status enums | DB-driven config table + shared constants | Add/rename statuses without touching 6+ files |
+| ~~Hardcoded status enums~~ | ~~DB-driven config table + shared constants~~ | ✅ **Done** — `shared/enums.ts` + `EnumContext` + Admin Statuses & Labels tab |

@@ -133,11 +133,14 @@ This eliminates the need for companion apps to make follow-up API calls to get e
 
 ## Closeout Project Status
 
-The project status enum includes a `Closeout` state between `On Hold` and `Complete`:
+The default project status enum includes a `Closeout` state between `On Hold` and `Complete`:
 
 ```
 Planning → Active → On Hold → Closeout → Complete
 ```
+
+> [!NOTE]
+> Project statuses are **configurable** via Admin → Statuses & Labels. The above is the default set. Custom statuses can be added, removed, or reordered through the API or the Admin UI.
 
 **Use case:** Capital projects and many other project types have a distinct closeout phase where the project is functionally complete but administrative work remains — final payments, documentation, grant reimbursement submissions.
 
@@ -145,6 +148,41 @@ Planning → Active → On Hold → Closeout → Complete
 # Move a project to closeout
 projects.update({ id: 42, status: "Closeout" })
 ```
+
+---
+
+## Configurable Enums
+
+Project statuses, task statuses, task priorities, and risk statuses are all admin-configurable. This allows integrators to work with the exact options their organization uses.
+
+```bash
+# Read all enum groups
+const enums = enums.list()
+# → { projectStatus: [...], taskStatus: [...], taskPriority: [...], riskStatus: [...] }
+
+# Each option has a label and color
+# { label: "Active", color: "green" }
+
+# Update an enum group (replaces all options)
+enums.update({
+  group: "projectStatus",
+  options: [
+    { label: "Planning", color: "blue" },
+    { label: "Active", color: "green" },
+    { label: "On Hold", color: "yellow" },
+    { label: "Closeout", color: "orange" },
+    { label: "Complete", color: "gray" },
+    { label: "Archived", color: "gray" }
+  ]
+})
+```
+
+**Contract:**
+- Enum options are stored in `app_settings` with `category = "enums"`.
+- All status/priority fields on projects, tasks, and risks are `text` — not constrained enums. Any string value can be stored.
+- The enum options define what appears in UI dropdowns, filters, and badge colors.
+- Shared type definitions are in `shared/enums.ts`.
+- Changes propagate immediately to all connected clients via React context (`EnumProvider`).
 
 ---
 
@@ -164,3 +202,4 @@ For production service-to-service calls, TaskLine will support API key authentic
 | Tags | `tags.add`, `tags.remove` | Write (companion) → Display (TaskLine) |
 | Webhooks | `webhook_subscriptions` | TaskLine → Push (companion) |
 | Closeout status | `projects.status = "Closeout"` | Bidirectional |
+| Configurable Enums | `enums.list`, `enums.update` | Read (companion) / Write (Admin) |

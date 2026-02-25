@@ -11,6 +11,7 @@ A full-stack project and task management platform for template-based delivery tr
 - **Calendar** — Projects/Tasks toggle view with phase color-coded task events
 - **Dashboard** — Portfolio health, risk tracking, upcoming deadlines, and governance overview
 - **Admin Settings** — Governance & access policies, notification preferences, and white-label branding
+- **Configurable Statuses & Labels** — Admin-editable project/task statuses, priorities, and risk statuses with color badges
 - **White-Label Branding** — Customizable app name and logo via Admin settings
 - **Command Palette** — Quick navigation with `Cmd+K` / `Ctrl+K`
 - **Excel Export** — Download project and task data as formatted spreadsheets

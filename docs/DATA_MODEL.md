@@ -55,7 +55,7 @@ All tables use SQLite via Drizzle ORM. Timestamps are Unix epoch integers. Curre
 | actualBudget | integer | nullable — cents |
 | externalId | text | nullable — companion app correlation ID |
 | metadata | text | nullable — JSON bag for companion app data |
-| status | text | enum: `Planning`, `Active`, `On Hold`, `Closeout`, `Complete` — default `Planning` |
+| status | text | configurable via Admin — defaults: `Planning`, `Active`, `On Hold`, `Closeout`, `Complete` |
 | createdAt | integer (timestamp) | NOT NULL, default now |
 | updatedAt | integer (timestamp) | NOT NULL, default now |
 
@@ -74,8 +74,8 @@ All tables use SQLite via Drizzle ORM. Timestamps are Unix epoch integers. Curre
 | durationDays | integer | nullable |
 | dependency | text | nullable — comma-separated task ID codes |
 | owner | text | nullable |
-| status | text | enum: `Not Started`, `In Progress`, `Complete`, `On Hold` — default `Not Started` |
-| priority | text | enum: `High`, `Medium`, `Low` — default `Medium` |
+| status | text | configurable via Admin — defaults: `Not Started`, `In Progress`, `Complete`, `On Hold` |
+| priority | text | configurable via Admin — defaults: `High`, `Medium`, `Low` |
 | phase | text | nullable |
 | milestone | text | nullable |
 | budget | integer | nullable — cents |
@@ -232,7 +232,7 @@ All tables use SQLite via Drizzle ORM. Timestamps are Unix epoch integers. Curre
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | integer | PK, auto-increment |
-| category | text | NOT NULL — `general`, `governance`, `notifications`, `templates` |
+| category | text | NOT NULL — `general`, `governance`, `notifications`, `templates`, `enums` |
 | settingKey | text | NOT NULL, UNIQUE |
 | value | text | NOT NULL — JSON-encoded |
 | updatedBy | text | nullable |
@@ -252,7 +252,7 @@ All tables use SQLite via Drizzle ORM. Timestamps are Unix epoch integers. Curre
 | probability | integer | NOT NULL, default 3 — 1–5 |
 | impact | integer | NOT NULL, default 3 — 1–5 |
 | riskScore | integer | NOT NULL, default 9 — probability × impact |
-| status | text | NOT NULL, default `Open` — `Open`, `Mitigated`, `Accepted`, `Closed` |
+| status | text | configurable via Admin — defaults: `Open`, `Mitigated`, `Accepted`, `Closed` |
 | mitigationPlan | text | nullable |
 | owner | text | nullable |
 | linkedTaskId | integer | nullable |

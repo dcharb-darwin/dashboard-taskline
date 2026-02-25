@@ -16,15 +16,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/DATA_MODEL.md` — complete schema reference for all 16 tables
 - `docs/API_REFERENCE.md` — all tRPC endpoints with input/output schemas
 - `docs/INTEGRATION_GUIDE.md` — externalId, metadata, tags, actualBudget contract, webhooks, Closeout
+- DB-driven configurable enums: `shared/enums.ts` types/defaults, `EnumContext` client provider, Admin Statuses & Labels tab
+- `enums.list` / `enums.update` tRPC endpoints for reading and writing enum options
+- 10 consumer pages updated to use `useEnums()` hook for dynamic statuses, priorities, and colors
 
 ### Changed
 - Project status enum: `Planning | Active | On Hold | Closeout | Complete` (was: `Planning | Active | On Hold | Complete`)
 - `emitGovernanceEvent` now accepts optional `entity` param, spread into webhook dispatch payload
 - PRD §9.3 updated with externalId, metadata, Closeout, and actualBudget contract note
 - PRD §10.1 updated with metadata field on tasks
+- PRD §14.3 added: Statuses & Labels tab for configurable enums
+- Project/task status and priority fields relaxed from `z.enum()` to `z.string()` for dynamic values
+- Drizzle schema enum constraints removed for configurable fields
+
+### Fixed
+- ESM `require()` in `db.ts` replaced with existing ESM import (server crash fix)
+- `enums.update` endpoint changed from `adminProcedure` to `publicProcedure` (matches other settings endpoints)
 
 ### Backlog
-- Refactor hardcoded project/task status enums to be DB-driven (single source of truth for UI dropdowns, filters, and badge colors)
+- Decompose `server/db.ts` into domain repositories
+- Split `server/routers.ts` into feature routers
 
 ## [2.0.0] - 2026-02-24 (gen2)
 

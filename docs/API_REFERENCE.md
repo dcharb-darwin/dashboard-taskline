@@ -82,7 +82,7 @@ All templates with filtering.
 | actualBudget | integer (≥0) | No |
 | externalId | string | No |
 | metadata | string (JSON) | No |
-| status | `Planning` \| `Active` \| `On Hold` \| `Closeout` \| `Complete` | No (default: Planning) |
+| status | string | No (default: Planning) | Configurable via Admin — defaults: Planning, Active, On Hold, Closeout, Complete |
 
 - **Returns:** `{ id: number }`
 
@@ -123,8 +123,8 @@ All tasks across all projects.
 | durationDays | integer (≥0) | No |
 | dependency | string | No |
 | owner | string | No |
-| status | `Not Started` \| `In Progress` \| `Complete` \| `On Hold` | No |
-| priority | `High` \| `Medium` \| `Low` | No |
+| status | string | No | Configurable via Admin — defaults: Not Started, In Progress, Complete, On Hold |
+| priority | string | No | Configurable via Admin — defaults: High, Medium, Low |
 | phase | string | No |
 | milestone | string | No |
 | budget | integer (≥0) | No |
@@ -296,6 +296,28 @@ Portfolio-level KPIs.
 ### `governance.deleteAccessPolicy` — Mutation
 - **Input:** `{ id: number }`
 - **Returns:** `{ success: true }`
+
+---
+
+## Configurable Enums
+
+### `enums.list` — Query
+Returns all configurable enum groups with their current options.
+- **Returns:** `{ projectStatus: EnumOption[], taskStatus: EnumOption[], taskPriority: EnumOption[], riskStatus: EnumOption[] }`
+
+Each `EnumOption` has:
+| Field | Type |
+|-------|------|
+| label | string |
+| color | string (blue, green, yellow, orange, red, purple, pink, gray) |
+
+### `enums.update` — Mutation
+Replaces all options for a single enum group.
+- **Input:** `{ group: "projectStatus" | "taskStatus" | "taskPriority" | "riskStatus", options: EnumOption[] }`
+- **Returns:** `{ success: true }`
+
+> [!NOTE]
+> Enum options are stored in the `app_settings` table with `category = "enums"`. Shared type definitions live in `shared/enums.ts`.
 
 ---
 
