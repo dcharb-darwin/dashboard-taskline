@@ -203,6 +203,7 @@ const emitGovernanceEvent = async (args: {
   action: string;
   webhookEvent?: WebhookEventName;
   payload?: Record<string, unknown>;
+  entity?: Record<string, unknown>;
 }) => {
   const actorName = getActorName(args.ctx.user);
   const actorOpenId = args.ctx.user?.openId ?? null;
@@ -226,6 +227,7 @@ const emitGovernanceEvent = async (args: {
         actorName,
         actorOpenId,
         ...(args.payload ?? {}),
+        ...(args.entity ? { entity: args.entity } : {}),
       },
     });
   }
@@ -537,7 +539,9 @@ export const appRouter = router({
             targetCompletionDate: z.date().optional(),
             budget: z.number().int().min(0).optional(),
             actualBudget: z.number().int().min(0).optional(),
-            status: z.enum(["Planning", "Active", "On Hold", "Complete"]).optional(),
+            externalId: z.string().optional(),
+            metadata: z.string().optional(),
+            status: z.enum(["Planning", "Active", "On Hold", "Closeout", "Complete"]).optional(),
           })
           .superRefine((value, ctx) => {
             ensureProjectDateRange(value, ctx);
@@ -614,6 +618,8 @@ export const appRouter = router({
           }
         }
 
+        const { getProjectById } = await import("./db");
+        const createdProject = await getProjectById(projectId);
         await emitGovernanceEvent({
           ctx,
           entityType: "project",
@@ -624,6 +630,7 @@ export const appRouter = router({
             templateType: input.templateType,
             status: input.status ?? "Planning",
           },
+          entity: createdProject ? { ...createdProject } as unknown as Record<string, unknown> : undefined,
         });
 
         return { id: projectId };
@@ -640,7 +647,9 @@ export const appRouter = router({
             targetCompletionDate: z.date().optional(),
             budget: z.number().int().min(0).optional(),
             actualBudget: z.number().int().min(0).optional(),
-            status: z.enum(["Planning", "Active", "On Hold", "Complete"]).optional(),
+            externalId: z.string().nullable().optional(),
+            metadata: z.string().nullable().optional(),
+            status: z.enum(["Planning", "Active", "On Hold", "Closeout", "Complete"]).optional(),
           })
           .superRefine((value, ctx) => {
             ensureProjectDateRange(value, ctx);
@@ -648,8 +657,9 @@ export const appRouter = router({
       )
       .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;
-        const { updateProject } = await import("./db");
+        const { updateProject, getProjectById } = await import("./db");
         await updateProject(id, data);
+        const updatedProject = await getProjectById(id);
         await emitGovernanceEvent({
           ctx,
           entityType: "project",
@@ -660,6 +670,7 @@ export const appRouter = router({
             changedFields: Object.keys(data),
             status: data.status,
           },
+          entity: updatedProject ? { ...updatedProject } as unknown as Record<string, unknown> : undefined,
         });
         return { success: true };
       }),
@@ -714,6 +725,7 @@ export const appRouter = router({
             deliverableType: z.string().optional(),
             completionPercent: z.number().int().min(0).max(100).optional(),
             notes: z.string().optional(),
+            metadata: z.string().optional(),
           })
           .superRefine((value, ctx) => {
             ensureTaskDateRange(value, ctx);
@@ -740,6 +752,7 @@ export const appRouter = router({
             taskId: task.taskId,
             status: task.status,
           },
+          entity: { ...task } as unknown as Record<string, unknown>,
         });
         return task;
       }),
@@ -765,6 +778,7 @@ export const appRouter = router({
             deliverableType: z.string().optional(),
             completionPercent: z.number().int().min(0).max(100).optional(),
             notes: z.string().optional(),
+            metadata: z.string().optional(),
           })
           .superRefine((value, ctx) => {
             ensureTaskDateRange(value, ctx);
@@ -806,6 +820,7 @@ export const appRouter = router({
               taskId: updated.taskId,
               status: updated.status,
             },
+            entity: { ...updated } as unknown as Record<string, unknown>,
           });
         }
         return { success: true };

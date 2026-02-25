@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `externalId` field on projects — companion apps store their own correlation ID
+- `metadata` JSON field on projects and tasks — domain-specific data bag for external systems
+- `Closeout` project status — distinct phase for administrative wind-down after functional completion
+- Full entity snapshot included in webhook payloads via `emitGovernanceEvent` entity param
+- Gen2 integration test suite (`server/gen2-integration.test.ts`) — 15 tests covering externalId, metadata, Closeout, and tags API
+- `docs/DATA_MODEL.md` — complete schema reference for all 16 tables
+- `docs/API_REFERENCE.md` — all tRPC endpoints with input/output schemas
+- `docs/INTEGRATION_GUIDE.md` — externalId, metadata, tags, actualBudget contract, webhooks, Closeout
+
+### Changed
+- Project status enum: `Planning | Active | On Hold | Closeout | Complete` (was: `Planning | Active | On Hold | Complete`)
+- `emitGovernanceEvent` now accepts optional `entity` param, spread into webhook dispatch payload
+- PRD §9.3 updated with externalId, metadata, Closeout, and actualBudget contract note
+- PRD §10.1 updated with metadata field on tasks
+
+### Backlog
+- Refactor hardcoded project/task status enums to be DB-driven (single source of truth for UI dropdowns, filters, and badge colors)
+
 ## [2.0.0] - 2026-02-24 (gen2)
 
 ### Added

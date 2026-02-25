@@ -61,7 +61,9 @@ export const projects = sqliteTable("projects", {
   targetCompletionDate: integer("targetCompletionDate", { mode: "timestamp" }),
   budget: integer("budget", { mode: "number" }), // stored as cents
   actualBudget: integer("actualBudget", { mode: "number" }), // stored as cents
-  status: text("status", { enum: ["Planning", "Active", "On Hold", "Complete"] }).default("Planning").notNull(),
+  externalId: text("externalId"), // optional — companion apps store their own ID here
+  metadata: text("metadata"), // JSON — companion apps store domain-specific data here
+  status: text("status", { enum: ["Planning", "Active", "On Hold", "Closeout", "Complete"] }).default("Planning").notNull(),
   createdAt: integer("createdAt", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
   updatedAt: integer("updatedAt", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
 });
@@ -93,6 +95,7 @@ export const tasks = sqliteTable("tasks", {
   deliverableType: text("deliverableType"),
   completionPercent: integer("completionPercent", { mode: "number" }).default(0).notNull(),
   notes: text("notes"),
+  metadata: text("metadata"), // JSON — companion apps store domain-specific data here
   createdAt: integer("createdAt", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
   updatedAt: integer("updatedAt", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
 });

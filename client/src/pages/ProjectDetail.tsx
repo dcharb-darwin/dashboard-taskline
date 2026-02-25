@@ -471,7 +471,9 @@ export default function ProjectDetail() {
                     ? "bg-blue-100 text-blue-700"
                     : project.status === "On Hold"
                       ? "bg-yellow-100 text-yellow-700"
-                      : "bg-gray-100 text-gray-700"
+                      : project.status === "Closeout"
+                        ? "bg-orange-100 text-orange-700"
+                        : "bg-gray-100 text-gray-700"
                   }`}
               >
                 {project.status}

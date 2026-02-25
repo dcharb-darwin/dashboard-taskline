@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { normalizeTemplateKey, parseTemplateTasks } from "@/lib/template";
 import { parseDateInputValue } from "@/lib/dateInput";
 import { Link, useLocation, useSearch } from "wouter";
-import { 
+import {
   ArrowLeft, FolderKanban, Check, ChevronDown, ChevronUp,
   Megaphone, Calendar, Presentation, ClipboardList, FileText, Share2,
   Search, ImageIcon, Video, Bell, DollarSign, PenTool, FolderOpen
@@ -41,7 +41,7 @@ export default function CreateProject() {
   const search = useSearch();
   const { data: templates } = trpc.templates.list.useQuery();
   const [showTaskPreview, setShowTaskPreview] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -165,231 +165,229 @@ export default function CreateProject() {
           </Button>
         </Link>
 
-          {/* Page Header */}
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight">Create New Project</h2>
-            <p className="text-muted-foreground mt-2">
-              Select a template and fill in the project details
-            </p>
-          </div>
+        {/* Page Header */}
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Create New Project</h2>
+          <p className="text-muted-foreground mt-2">
+            Select a template and fill in the project details
+          </p>
+        </div>
 
-          {/* Step 1: Template Selection */}
-          <div className="space-y-4">
-            <h3 className="text-xl font-semibold">Step 1: Select a Template</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {templates?.map((template) => {
-                const templateTasks = parseTemplateTasks(template.sampleTasks);
-                const taskCount = templateTasks.length;
-                const isSelected = formData.templateId === template.id.toString();
-                const iconKey = normalizeTemplateKey(template.templateKey || template.name);
-                
-                return (
-                  <Card
-                    key={template.id}
-                    className={`cursor-pointer transition-all hover:shadow-lg ${
-                      isSelected ? "ring-2 ring-blue-600 bg-blue-50" : "bg-white hover:bg-slate-50"
+        {/* Step 1: Template Selection */}
+        <div className="space-y-4">
+          <h3 className="text-xl font-semibold">Step 1: Select a Template</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {templates?.map((template) => {
+              const templateTasks = parseTemplateTasks(template.sampleTasks);
+              const taskCount = templateTasks.length;
+              const isSelected = formData.templateId === template.id.toString();
+              const iconKey = normalizeTemplateKey(template.templateKey || template.name);
+
+              return (
+                <Card
+                  key={template.id}
+                  className={`cursor-pointer transition-all hover:shadow-lg ${isSelected ? "ring-2 ring-blue-600 bg-blue-50" : "bg-white hover:bg-slate-50"
                     }`}
-                    onClick={() => {
-                      setFormData({
-                        ...formData,
-                        templateType: template.name,
-                        templateId: template.id.toString(),
-                      });
-                      setShowTaskPreview(true);
-                    }}
-                  >
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-3 flex-1">
-                          <div className={`p-2 rounded-lg ${
-                            isSelected ? "bg-blue-600" : "bg-slate-100"
-                          }`}>
-                            {(() => {
-                              const Icon = templateIcons[iconKey] || FolderKanban;
-                              return <Icon className={`h-5 w-5 ${
-                                isSelected ? "text-white" : "text-slate-600"
-                              }`} />;
-                            })()}
-                          </div>
-                          <div className="flex-1">
-                            <CardTitle className="text-lg">{template.name}</CardTitle>
-                            <CardDescription className="mt-1">
-                              {taskCount} tasks • {template.description || "Standard project template"}
-                            </CardDescription>
-                          </div>
-                        </div>
-                        {isSelected && (
-                          <div className="flex-shrink-0 ml-2">
-                            <div className="h-6 w-6 rounded-full bg-blue-600 flex items-center justify-center">
-                              <Check className="h-4 w-4 text-white" />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </CardHeader>
-                  </Card>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Task Preview (shown when template is selected) */}
-          {formData.templateId && selectedTemplate && (
-            <Collapsible open={showTaskPreview} onOpenChange={setShowTaskPreview}>
-              <Card className="bg-white border-blue-200">
-                <CardHeader>
-                  <CollapsibleTrigger className="flex items-center justify-between w-full">
-                    <div>
-                      <CardTitle>Template Tasks Preview</CardTitle>
-                      <CardDescription>
-                        {selectedTemplateTasks.length} tasks will be created automatically
-                      </CardDescription>
-                    </div>
-                    {showTaskPreview ? (
-                      <ChevronUp className="h-5 w-5 text-muted-foreground" />
-                    ) : (
-                      <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                    )}
-                  </CollapsibleTrigger>
-                </CardHeader>
-                <CollapsibleContent>
-                  <CardContent className="space-y-4">
-                    {Object.entries(tasksByPhase).map(([phase, tasks]) => (
-                      <div key={phase} className="space-y-2">
-                        <h4 className="font-semibold text-sm text-blue-600">{phase}</h4>
-                        <div className="space-y-1 pl-4">
-                          {tasks.map((task, idx: number) => (
-                            <div key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
-                              <span className="text-xs mt-0.5">•</span>
-                              <span>{task.taskDescription || task.description || "Untitled task"}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
-          )}
-
-          {/* Step 2: Project Details Form (only shown after template selection) */}
-          {formData.templateId && (
-            <form onSubmit={handleSubmit}>
-              <div className="space-y-4">
-                <h3 className="text-xl font-semibold">Step 2: Project Details</h3>
-                <Card className="bg-white">
+                  onClick={() => {
+                    setFormData({
+                      ...formData,
+                      templateType: template.name,
+                      templateId: template.id.toString(),
+                    });
+                    setShowTaskPreview(true);
+                  }}
+                >
                   <CardHeader>
-                    <CardTitle>Basic Information</CardTitle>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-3 flex-1">
+                        <div className={`p-2 rounded-lg ${isSelected ? "bg-blue-600" : "bg-slate-100"
+                          }`}>
+                          {(() => {
+                            const Icon = templateIcons[iconKey] || FolderKanban;
+                            return <Icon className={`h-5 w-5 ${isSelected ? "text-white" : "text-slate-600"
+                              }`} />;
+                          })()}
+                        </div>
+                        <div className="flex-1">
+                          <CardTitle className="text-lg">{template.name}</CardTitle>
+                          <CardDescription className="mt-1">
+                            {taskCount} tasks • {template.description || "Standard project template"}
+                          </CardDescription>
+                        </div>
+                      </div>
+                      {isSelected && (
+                        <div className="flex-shrink-0 ml-2">
+                          <div className="h-6 w-6 rounded-full bg-blue-600 flex items-center justify-center">
+                            <Check className="h-4 w-4 text-white" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </CardHeader>
-                  <CardContent className="space-y-6">
-                    {/* Project Name */}
-                    <div className="space-y-2">
-                      <Label htmlFor="name">
-                        Project Name <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        id="name"
-                        placeholder="Enter project name"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        required
-                      />
-                    </div>
-
-                    {/* Description */}
-                    <div className="space-y-2">
-                      <Label htmlFor="description">Description</Label>
-                      <Textarea
-                        id="description"
-                        placeholder="Enter project description"
-                        value={formData.description}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        rows={3}
-                      />
-                    </div>
-
-                    {/* Project Manager */}
-                    <div className="space-y-2">
-                      <Label htmlFor="projectManager">Project Manager</Label>
-                      <Input
-                        id="projectManager"
-                        placeholder="Enter project manager name"
-                        value={formData.projectManager}
-                        onChange={(e) => setFormData({ ...formData, projectManager: e.target.value })}
-                      />
-                    </div>
-
-                    {/* Dates */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="startDate">Start Date</Label>
-                        <Input
-                          id="startDate"
-                          type="date"
-                          value={formData.startDate}
-                          onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="targetCompletionDate">Target Completion Date</Label>
-                        <Input
-                          id="targetCompletionDate"
-                          type="date"
-                          value={formData.targetCompletionDate}
-                          onChange={(e) => setFormData({ ...formData, targetCompletionDate: e.target.value })}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Budget */}
-                    <div className="space-y-2">
-                      <Label htmlFor="budget">Budget ($)</Label>
-                      <Input
-                        id="budget"
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={formData.budget}
-                        onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
-                      />
-                    </div>
-
-                    {/* Status */}
-                    <div className="space-y-2">
-                      <Label htmlFor="status">Status</Label>
-                      <Select
-                        value={formData.status}
-                        onValueChange={(value: any) => setFormData({ ...formData, status: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Planning">Planning</SelectItem>
-                          <SelectItem value="Active">Active</SelectItem>
-                          <SelectItem value="On Hold">On Hold</SelectItem>
-                          <SelectItem value="Complete">Complete</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex gap-3 pt-4">
-                      <Button type="submit" disabled={createProject.isPending} className="flex-1">
-                        {createProject.isPending ? "Creating..." : "Create Project"}
-                      </Button>
-                      <Link href="/projects">
-                        <Button type="button" variant="outline">
-                          Cancel
-                        </Button>
-                      </Link>
-                    </div>
-                  </CardContent>
                 </Card>
-              </div>
-            </form>
-          )}
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Task Preview (shown when template is selected) */}
+        {formData.templateId && selectedTemplate && (
+          <Collapsible open={showTaskPreview} onOpenChange={setShowTaskPreview}>
+            <Card className="bg-white border-blue-200">
+              <CardHeader>
+                <CollapsibleTrigger className="flex items-center justify-between w-full">
+                  <div>
+                    <CardTitle>Template Tasks Preview</CardTitle>
+                    <CardDescription>
+                      {selectedTemplateTasks.length} tasks will be created automatically
+                    </CardDescription>
+                  </div>
+                  {showTaskPreview ? (
+                    <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                  )}
+                </CollapsibleTrigger>
+              </CardHeader>
+              <CollapsibleContent>
+                <CardContent className="space-y-4">
+                  {Object.entries(tasksByPhase).map(([phase, tasks]) => (
+                    <div key={phase} className="space-y-2">
+                      <h4 className="font-semibold text-sm text-blue-600">{phase}</h4>
+                      <div className="space-y-1 pl-4">
+                        {tasks.map((task, idx: number) => (
+                          <div key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
+                            <span className="text-xs mt-0.5">•</span>
+                            <span>{task.taskDescription || task.description || "Untitled task"}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+        )}
+
+        {/* Step 2: Project Details Form (only shown after template selection) */}
+        {formData.templateId && (
+          <form onSubmit={handleSubmit}>
+            <div className="space-y-4">
+              <h3 className="text-xl font-semibold">Step 2: Project Details</h3>
+              <Card className="bg-white">
+                <CardHeader>
+                  <CardTitle>Basic Information</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Project Name */}
+                  <div className="space-y-2">
+                    <Label htmlFor="name">
+                      Project Name <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="name"
+                      placeholder="Enter project name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      placeholder="Enter project description"
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      rows={3}
+                    />
+                  </div>
+
+                  {/* Project Manager */}
+                  <div className="space-y-2">
+                    <Label htmlFor="projectManager">Project Manager</Label>
+                    <Input
+                      id="projectManager"
+                      placeholder="Enter project manager name"
+                      value={formData.projectManager}
+                      onChange={(e) => setFormData({ ...formData, projectManager: e.target.value })}
+                    />
+                  </div>
+
+                  {/* Dates */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="startDate">Start Date</Label>
+                      <Input
+                        id="startDate"
+                        type="date"
+                        value={formData.startDate}
+                        onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="targetCompletionDate">Target Completion Date</Label>
+                      <Input
+                        id="targetCompletionDate"
+                        type="date"
+                        value={formData.targetCompletionDate}
+                        onChange={(e) => setFormData({ ...formData, targetCompletionDate: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Budget */}
+                  <div className="space-y-2">
+                    <Label htmlFor="budget">Budget ($)</Label>
+                    <Input
+                      id="budget"
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData.budget}
+                      onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                    />
+                  </div>
+
+                  {/* Status */}
+                  <div className="space-y-2">
+                    <Label htmlFor="status">Status</Label>
+                    <Select
+                      value={formData.status}
+                      onValueChange={(value: any) => setFormData({ ...formData, status: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Planning">Planning</SelectItem>
+                        <SelectItem value="Active">Active</SelectItem>
+                        <SelectItem value="On Hold">On Hold</SelectItem>
+                        <SelectItem value="Closeout">Closeout</SelectItem>
+                        <SelectItem value="Complete">Complete</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-3 pt-4">
+                    <Button type="submit" disabled={createProject.isPending} className="flex-1">
+                      {createProject.isPending ? "Creating..." : "Create Project"}
+                    </Button>
+                    <Link href="/projects">
+                      <Button type="button" variant="outline">
+                        Cancel
+                      </Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </form>
+        )}
       </div>
     </AppLayout>
   );

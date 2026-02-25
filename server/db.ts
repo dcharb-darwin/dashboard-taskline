@@ -846,6 +846,8 @@ const buildMemoryState = (): MemoryState => {
       targetCompletionDate: end,
       budget: def.budget,
       actualBudget: Math.round(def.budget * (def.progressPct / 100) * 0.85),
+      externalId: null,
+      metadata: null,
       status: isComplete ? "Complete" : "Active",
       createdAt: addDays(start, -7),
       updatedAt: isComplete ? end : now,
@@ -976,6 +978,7 @@ const buildMemoryState = (): MemoryState => {
         deliverableType: null,
         completionPercent,
         notes: bp.notes,
+        metadata: null,
         createdAt: addDays(startDate, -1),
         updatedAt: status === "Complete" ? dueDate : status === "In Progress" ? now : startDate,
       });
@@ -1771,6 +1774,8 @@ export async function createProject(data: InsertProject) {
       targetCompletionDate: data.targetCompletionDate ?? null,
       budget: data.budget ?? null,
       actualBudget: data.actualBudget ?? null,
+      externalId: data.externalId ?? null,
+      metadata: data.metadata ?? null,
       status: data.status ?? "Planning",
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -1802,6 +1807,8 @@ export async function updateProject(id: number, data: Partial<InsertProject>) {
         data.targetCompletionDate ?? memoryState.projects[index]!.targetCompletionDate,
       budget: data.budget ?? memoryState.projects[index]!.budget,
       actualBudget: data.actualBudget ?? memoryState.projects[index]!.actualBudget,
+      externalId: data.externalId !== undefined ? data.externalId : memoryState.projects[index]!.externalId,
+      metadata: data.metadata !== undefined ? data.metadata : memoryState.projects[index]!.metadata,
     };
     return;
   }
@@ -1989,6 +1996,7 @@ export async function createTask(data: InsertTask) {
       deliverableType: data.deliverableType ?? null,
       completionPercent: data.completionPercent ?? 0,
       notes: data.notes ?? null,
+      metadata: data.metadata ?? null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -2037,6 +2045,7 @@ export async function updateTask(id: number, data: Partial<InsertTask>) {
       approver: pick(data.approver, current.approver),
       deliverableType: pick(data.deliverableType, current.deliverableType),
       notes: pick(data.notes, current.notes),
+      metadata: pick(data.metadata, current.metadata),
       completionPercent: pick(data.completionPercent, current.completionPercent),
     };
     return;

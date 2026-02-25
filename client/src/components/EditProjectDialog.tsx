@@ -127,6 +127,7 @@ export function EditProjectDialog({ project, open, onOpenChange, onSuccess }: Ed
                   <SelectItem value="Planning">Planning</SelectItem>
                   <SelectItem value="Active">Active</SelectItem>
                   <SelectItem value="On Hold">On Hold</SelectItem>
+                  <SelectItem value="Closeout">Closeout</SelectItem>
                   <SelectItem value="Complete">Complete</SelectItem>
                 </SelectContent>
               </Select>

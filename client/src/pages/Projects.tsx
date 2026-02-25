@@ -23,7 +23,7 @@ export default function Projects() {
     const searchParam = searchParams.get("q");
     const healthParam = searchParams.get("health");
 
-    const allowedStatus = new Set(["all", "Planning", "Active", "On Hold", "Complete"]);
+    const allowedStatus = new Set(["all", "Planning", "Active", "On Hold", "Closeout", "Complete"]);
     if (statusParam && allowedStatus.has(statusParam)) {
       setStatusFilter(statusParam);
     }
@@ -118,6 +118,12 @@ export default function Projects() {
                   On Hold
                 </Button>
                 <Button
+                  variant={statusFilter === "Closeout" ? "default" : "outline"}
+                  onClick={() => setStatusFilter("Closeout")}
+                >
+                  Closeout
+                </Button>
+                <Button
                   variant={statusFilter === "Complete" ? "default" : "outline"}
                   onClick={() => setStatusFilter("Complete")}
                 >
@@ -150,7 +156,9 @@ export default function Projects() {
                               ? "bg-blue-100 text-blue-700"
                               : project.status === "On Hold"
                                 ? "bg-yellow-100 text-yellow-700"
-                                : "bg-gray-100 text-gray-700"
+                                : project.status === "Closeout"
+                                  ? "bg-orange-100 text-orange-700"
+                                  : "bg-gray-100 text-gray-700"
                             }`}
                         >
                           {project.status}

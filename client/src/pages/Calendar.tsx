@@ -99,6 +99,7 @@ export default function Calendar() {
         case "Planning": backgroundColor = "#6366f1"; break;
         case "Active": backgroundColor = "#10b981"; break;
         case "On Hold": backgroundColor = "#f59e0b"; break;
+        case "Closeout": backgroundColor = "#f97316"; break;
         case "Complete": backgroundColor = "#6b7280"; break;
       }
       return {
@@ -170,8 +171,8 @@ export default function Calendar() {
           <button
             onClick={() => setViewMode("projects")}
             className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${viewMode === "projects"
-                ? "bg-blue-100 text-blue-800"
-                : "text-muted-foreground hover:text-foreground"
+              ? "bg-blue-100 text-blue-800"
+              : "text-muted-foreground hover:text-foreground"
               }`}
           >
             Projects
@@ -179,8 +180,8 @@ export default function Calendar() {
           <button
             onClick={() => setViewMode("tasks")}
             className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${viewMode === "tasks"
-                ? "bg-blue-100 text-blue-800"
-                : "text-muted-foreground hover:text-foreground"
+              ? "bg-blue-100 text-blue-800"
+              : "text-muted-foreground hover:text-foreground"
               }`}
           >
             Tasks
@@ -228,6 +229,10 @@ export default function Calendar() {
           <div className="flex items-center gap-2">
             <div className="h-4 w-4 rounded" style={{ backgroundColor: "#f59e0b" }}></div>
             <span className="text-sm">On Hold</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="h-4 w-4 rounded" style={{ backgroundColor: "#f97316" }}></div>
+            <span className="text-sm">Closeout</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="h-4 w-4 rounded" style={{ backgroundColor: "#6b7280" }}></div>

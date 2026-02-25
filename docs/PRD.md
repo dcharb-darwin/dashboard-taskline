@@ -65,9 +65,9 @@ The application supports customizable branding (organization name and logo) and 
 
 ---
 
-## 4. Development Team Responsibilities
+## 4. Development Handoff
 
-The following areas are **not specified in this PRD** and are the development team's responsibility:
+The following areas are **not specified in this PRD** 
 
 | Area | Notes |
 |------|-------|
@@ -239,7 +239,12 @@ Each sample task within a template includes:
 | Target Completion Date | Date | No |
 | Planned Budget | Currency (cents) | No |
 | Actual Budget | Currency (cents) | No |
-| Status | Enum: Planning, Active, On Hold, Complete | Yes |
+| External ID | String | No | Opaque — companion apps store their own ID here |
+| Metadata | Text (JSON) | No | Opaque — companion apps store domain-specific data here |
+| Status | Enum: Planning, Active, On Hold, Closeout, Complete | Yes |
+
+> [!NOTE]
+> `actualBudget` on projects may be updated by companion apps via the API. TaskLine displays this value but does not independently compute it. This enables financial tracking apps to push spend data into TaskLine's budget views without TaskLine needing to understand invoicing.
 
 ### 9.4 Project Detail Page
 
@@ -309,6 +314,7 @@ The project detail page is the primary workspace with these sections:
 | Approver | String | No | |
 | Deliverable Type | String | No | |
 | Notes | Text | No | |
+| Metadata | Text (JSON) | No | Opaque — companion apps store domain-specific data |
 
 ### 10.2 Task Creation
 - Add from project detail page
