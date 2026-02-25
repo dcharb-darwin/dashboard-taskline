@@ -11,6 +11,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { parseDateInputValue, toDateInputValue } from "@/lib/dateInput";
+import { useEnums } from "@/contexts/EnumContext";
 
 interface Task {
   id: number;
@@ -22,8 +23,8 @@ interface Task {
   durationDays: number | null;
   dependency: string | null;
   owner: string | null;
-  status: "Not Started" | "In Progress" | "Complete" | "On Hold";
-  priority: "High" | "Medium" | "Low";
+  status: string;
+  priority: string;
   phase: string | null;
   budget: number | null;
   approvalRequired: "Yes" | "No";
@@ -60,6 +61,7 @@ const buildFormData = (task: Task) => ({
 
 export function EditTaskDialog({ task, open, onOpenChange, onSuccess }: EditTaskDialogProps) {
   const [formData, setFormData] = useState(() => buildFormData(task));
+  const enums = useEnums();
 
   useEffect(() => {
     setFormData(buildFormData(task));
@@ -176,10 +178,9 @@ export function EditTaskDialog({ task, open, onOpenChange, onSuccess }: EditTask
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Not Started">Not Started</SelectItem>
-                    <SelectItem value="In Progress">In Progress</SelectItem>
-                    <SelectItem value="Complete">Complete</SelectItem>
-                    <SelectItem value="On Hold">On Hold</SelectItem>
+                    {enums.taskStatus.map((opt) => (
+                      <SelectItem key={opt.label} value={opt.label}>{opt.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -191,9 +192,9 @@ export function EditTaskDialog({ task, open, onOpenChange, onSuccess }: EditTask
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="High">High</SelectItem>
-                    <SelectItem value="Medium">Medium</SelectItem>
-                    <SelectItem value="Low">Low</SelectItem>
+                    {enums.taskPriority.map((opt) => (
+                      <SelectItem key={opt.label} value={opt.label}>{opt.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

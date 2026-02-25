@@ -63,7 +63,7 @@ export const projects = sqliteTable("projects", {
   actualBudget: integer("actualBudget", { mode: "number" }), // stored as cents
   externalId: text("externalId"), // optional — companion apps store their own ID here
   metadata: text("metadata"), // JSON — companion apps store domain-specific data here
-  status: text("status", { enum: ["Planning", "Active", "On Hold", "Closeout", "Complete"] }).default("Planning").notNull(),
+  status: text("status").default("Planning").notNull(), // managed via app_settings enums
   createdAt: integer("createdAt", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
   updatedAt: integer("updatedAt", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
 });
@@ -84,8 +84,8 @@ export const tasks = sqliteTable("tasks", {
   durationDays: integer("durationDays", { mode: "number" }),
   dependency: text("dependency"), // comma-separated task IDs
   owner: text("owner"),
-  status: text("status", { enum: ["Not Started", "In Progress", "Complete", "On Hold"] }).default("Not Started").notNull(),
-  priority: text("priority", { enum: ["High", "Medium", "Low"] }).default("Medium").notNull(),
+  status: text("status").default("Not Started").notNull(), // managed via app_settings enums
+  priority: text("priority").default("Medium").notNull(), // managed via app_settings enums
   phase: text("phase"),
   milestone: text("milestone"),
   budget: integer("budget", { mode: "number" }), // stored as cents

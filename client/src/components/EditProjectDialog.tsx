@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { useEnums } from "@/contexts/EnumContext";
 
 interface Project {
   id: number;
@@ -27,6 +28,7 @@ interface EditProjectDialogProps {
 }
 
 export function EditProjectDialog({ project, open, onOpenChange, onSuccess }: EditProjectDialogProps) {
+  const enums = useEnums();
   const [formData, setFormData] = useState({
     name: project.name,
     description: project.description || "",
@@ -124,11 +126,9 @@ export function EditProjectDialog({ project, open, onOpenChange, onSuccess }: Ed
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Planning">Planning</SelectItem>
-                  <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="On Hold">On Hold</SelectItem>
-                  <SelectItem value="Closeout">Closeout</SelectItem>
-                  <SelectItem value="Complete">Complete</SelectItem>
+                  {enums.projectStatus.map((opt) => (
+                    <SelectItem key={opt.label} value={opt.label}>{opt.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

@@ -1055,8 +1055,21 @@ const buildMemoryState = (): MemoryState => {
         createdAt: new Date(seedTimestamp),
         updatedAt: new Date(seedTimestamp),
       },
+      ...(() => {
+        const { DEFAULT_ENUMS, enumSettingKey } = require("../shared/enums");
+        const groups = Object.keys(DEFAULT_ENUMS) as Array<keyof typeof DEFAULT_ENUMS>;
+        return groups.map((group, i) => ({
+          id: 3 + i,
+          category: "enums",
+          settingKey: enumSettingKey(group),
+          value: JSON.stringify(DEFAULT_ENUMS[group]),
+          updatedBy: "System",
+          createdAt: new Date(seedTimestamp),
+          updatedAt: new Date(seedTimestamp),
+        }));
+      })(),
     ] as AppSetting[],
-    nextAppSettingId: 3,
+    nextAppSettingId: 7,
   };
 };
 
@@ -3454,7 +3467,7 @@ export async function updateBranding(data: Partial<BrandingData>): Promise<Brand
   return getBranding();
 }
 
-function upsertMemorySetting(key: string, value: string, now: Date) {
+function upsertMemorySetting(key: string, value: string, now: Date, category = "branding") {
   const existing = memoryState.appSettings.find((s) => s.settingKey === key);
   if (existing) {
     existing.value = value;
@@ -3462,7 +3475,7 @@ function upsertMemorySetting(key: string, value: string, now: Date) {
   } else {
     memoryState.appSettings.push({
       id: memoryState.nextAppSettingId++,
-      category: "branding",
+      category,
       settingKey: key,
       value,
       updatedBy: null,
@@ -3481,3 +3494,54 @@ async function upsertDbSetting(db: any, table: any, category: string, key: strin
   }
 }
 
+// ── Configurable Enums ──────────────────────────────────────────────────────
+
+import type { EnumOption, EnumGroupKey } from "../shared/enums";
+import { DEFAULT_ENUMS, enumSettingKey } from "../shared/enums";
+
+export async function getEnumOptions(group: EnumGroupKey): Promise<EnumOption[]> {
+  const key = enumSettingKey(group);
+  const raw = getSettingValue(key);
+  if (raw) {
+    try { return JSON.parse(raw); } catch { /* fall through */ }
+  }
+
+  const db = await getDb();
+  if (db) {
+    const { appSettings } = await import("../drizzle/schema");
+    const rows = await db.select().from(appSettings).where(eq(appSettings.settingKey, key));
+    if (rows.length > 0) {
+      try { return JSON.parse(rows[0].value); } catch { /* fall through */ }
+    }
+  }
+
+  return DEFAULT_ENUMS[group];
+}
+
+export async function getAllEnums(): Promise<Record<EnumGroupKey, EnumOption[]>> {
+  const groups: EnumGroupKey[] = ["projectStatus", "taskStatus", "taskPriority", "riskStatus"];
+  const result = {} as Record<EnumGroupKey, EnumOption[]>;
+  for (const group of groups) {
+    result[group] = await getEnumOptions(group);
+  }
+  return result;
+}
+
+export async function setEnumOptions(group: EnumGroupKey, options: EnumOption[]): Promise<EnumOption[]> {
+  const key = enumSettingKey(group);
+  const value = JSON.stringify(options);
+  const now = new Date();
+
+  const db = await getDb();
+  if (!db) {
+    upsertMemorySetting(key, value, now, "enums");
+    return options;
+  }
+
+  const { appSettings } = await import("../drizzle/schema");
+  await upsertDbSetting(db, appSettings, "enums", key, value);
+
+  // Also update memory state for cache consistency
+  upsertMemorySetting(key, value, now, "enums");
+  return options;
+}

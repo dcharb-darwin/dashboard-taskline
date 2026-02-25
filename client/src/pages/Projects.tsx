@@ -10,16 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { ViewToggle } from "@/components/ViewToggle";
 import { useViewMode } from "@/hooks/useViewMode";
-
-const statusBadge = (status: string) => {
-  const cls =
-    status === "Active" ? "bg-green-100 text-green-700"
-      : status === "Planning" ? "bg-blue-100 text-blue-700"
-        : status === "On Hold" ? "bg-yellow-100 text-yellow-700"
-          : status === "Closeout" ? "bg-orange-100 text-orange-700"
-            : "bg-gray-100 text-gray-700";
-  return `whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${cls}`;
-};
+import { useEnums, getBadgeClass } from "@/contexts/EnumContext";
 
 export default function Projects() {
   const { data: projects, isLoading } = trpc.projects.list.useQuery();
@@ -29,6 +20,13 @@ export default function Projects() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [healthFilter, setHealthFilter] = useState<string | null>(null);
   const [viewMode, setViewMode] = useViewMode("projects");
+  const enums = useEnums();
+  const statusOptions = enums.projectStatus;
+
+  const statusBadge = (status: string) => {
+    const cls = getBadgeClass(statusOptions, status);
+    return `whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${cls}`;
+  };
 
   useEffect(() => {
     const searchParams = new URLSearchParams(search);
@@ -36,7 +34,7 @@ export default function Projects() {
     const searchParam = searchParams.get("q");
     const healthParam = searchParams.get("health");
 
-    const allowedStatus = new Set(["all", "Planning", "Active", "On Hold", "Closeout", "Complete"]);
+    const allowedStatus = new Set(["all", ...statusOptions.map((o) => o.label)]);
     if (statusParam && allowedStatus.has(statusParam)) {
       setStatusFilter(statusParam);
     }
@@ -112,36 +110,15 @@ export default function Projects() {
                 >
                   All
                 </Button>
-                <Button
-                  variant={statusFilter === "Planning" ? "default" : "outline"}
-                  onClick={() => setStatusFilter("Planning")}
-                >
-                  Planning
-                </Button>
-                <Button
-                  variant={statusFilter === "Active" ? "default" : "outline"}
-                  onClick={() => setStatusFilter("Active")}
-                >
-                  Active
-                </Button>
-                <Button
-                  variant={statusFilter === "On Hold" ? "default" : "outline"}
-                  onClick={() => setStatusFilter("On Hold")}
-                >
-                  On Hold
-                </Button>
-                <Button
-                  variant={statusFilter === "Closeout" ? "default" : "outline"}
-                  onClick={() => setStatusFilter("Closeout")}
-                >
-                  Closeout
-                </Button>
-                <Button
-                  variant={statusFilter === "Complete" ? "default" : "outline"}
-                  onClick={() => setStatusFilter("Complete")}
-                >
-                  Complete
-                </Button>
+                {statusOptions.map((opt) => (
+                  <Button
+                    key={opt.label}
+                    variant={statusFilter === opt.label ? "default" : "outline"}
+                    onClick={() => setStatusFilter(opt.label)}
+                  >
+                    {opt.label}
+                  </Button>
+                ))}
               </div>
               <ViewToggle mode={viewMode} onModeChange={setViewMode} />
             </div>

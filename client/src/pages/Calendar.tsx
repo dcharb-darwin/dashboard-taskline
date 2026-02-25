@@ -9,6 +9,7 @@ import { useLocation } from "wouter";
 import { useMemo, useState } from "react";
 import { getPhaseColor } from "@/lib/phase-utils";
 import "react-big-calendar/lib/css/react-big-calendar.css";
+import { useEnums, getHexColor } from "@/contexts/EnumContext";
 
 const locales = {
   "en-US": enUS,
@@ -27,6 +28,7 @@ export default function Calendar() {
   const { data: projects, isLoading: projectsLoading } = trpc.projects.list.useQuery();
   const { data: allTasks, isLoading: tasksLoading } = trpc.tasks.listAll.useQuery();
   const [viewMode, setViewMode] = useState<"projects" | "tasks">("projects");
+  const enums = useEnums();
 
   const isLoading = projectsLoading || (viewMode === "tasks" && tasksLoading);
 
@@ -94,14 +96,7 @@ export default function Calendar() {
 
     if (res.type === "project") {
       const project = res.project;
-      let backgroundColor = "#3b82f6";
-      switch (project.status) {
-        case "Planning": backgroundColor = "#6366f1"; break;
-        case "Active": backgroundColor = "#10b981"; break;
-        case "On Hold": backgroundColor = "#f59e0b"; break;
-        case "Closeout": backgroundColor = "#f97316"; break;
-        case "Complete": backgroundColor = "#6b7280"; break;
-      }
+      const backgroundColor = getHexColor(enums.projectStatus, project.status);
       return {
         style: {
           backgroundColor,

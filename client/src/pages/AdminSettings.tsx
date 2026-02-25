@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Bell, ImagePlus, Paintbrush, ShieldCheck, Settings, Trash2, Webhook } from "lucide-react";
+import { Bell, ImagePlus, Paintbrush, ShieldCheck, Settings, Tags, Trash2, Webhook, Plus, GripVertical, ArrowUp, ArrowDown } from "lucide-react";
 import { format } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -20,7 +20,7 @@ const webhookEventOptions = [
 ] as const;
 
 type GovernanceRole = "Admin" | "Editor" | "Viewer";
-type AdminTab = "governance" | "notifications" | "branding";
+type AdminTab = "governance" | "notifications" | "branding" | "enums";
 
 interface NotifPref {
     channels: { inApp: boolean; email: boolean; slack: boolean; webhook: boolean; webhookUrl: string };
@@ -128,6 +128,7 @@ export default function AdminSettings() {
     const tabs: { key: AdminTab; label: string; icon: typeof Settings }[] = [
         { key: "governance", label: "Governance & Access", icon: ShieldCheck },
         { key: "notifications", label: "Notifications", icon: Bell },
+        { key: "enums", label: "Statuses & Labels", icon: Tags },
         { key: "branding", label: "Branding", icon: Paintbrush },
     ];
 
@@ -350,6 +351,9 @@ export default function AdminSettings() {
 
                 {/* ─── Branding tab ───────────────────────────────────── */}
                 {activeTab === "branding" && <BrandingTab />}
+
+                {/* ─── Enums tab ──────────────────────────────────────── */}
+                {activeTab === "enums" && <EnumsTab />}
             </div>
         </AppLayout>
     );
@@ -522,5 +526,180 @@ function BrandingTab() {
                 </CardContent>
             </Card>
         </div>
+    );
+}
+
+// ── Enums tab component ─────────────────────────────────────────────────────
+import type { EnumOption, EnumGroupKey } from "@shared/enums";
+import { ENUM_GROUP_LABELS, AVAILABLE_COLORS, COLOR_BADGE_CLASSES } from "@shared/enums";
+
+function EnumsTab() {
+    const utils = trpc.useUtils();
+    const { data: enumData } = trpc.enums.list.useQuery();
+    const updateMutation = trpc.enums.update.useMutation({
+        onSuccess: async () => {
+            toast.success("Enum options saved");
+            await utils.enums.list.invalidate();
+        },
+        onError: (e) => toast.error(e.message),
+    });
+
+    return (
+        <div className="space-y-6">
+            {enumData && (
+                (Object.keys(ENUM_GROUP_LABELS) as EnumGroupKey[]).map((group) => (
+                    <EnumGroupEditor
+                        key={group}
+                        group={group}
+                        options={enumData[group]}
+                        onSave={(options) => updateMutation.mutate({ group, options })}
+                        isSaving={updateMutation.isPending}
+                    />
+                ))
+            )}
+        </div>
+    );
+}
+
+function EnumGroupEditor({
+    group,
+    options: serverOptions,
+    onSave,
+    isSaving,
+}: {
+    group: EnumGroupKey;
+    options: EnumOption[];
+    onSave: (options: EnumOption[]) => void;
+    isSaving: boolean;
+}) {
+    const [items, setItems] = useState<EnumOption[]>(serverOptions);
+
+    useEffect(() => {
+        setItems(serverOptions);
+    }, [serverOptions]);
+
+    const hasChanges = JSON.stringify(items) !== JSON.stringify(serverOptions);
+
+    const addItem = () => {
+        setItems((prev) => [...prev, { label: "", color: "gray" }]);
+    };
+
+    const removeItem = (index: number) => {
+        setItems((prev) => prev.filter((_, i) => i !== index));
+    };
+
+    const updateItem = (index: number, field: keyof EnumOption, value: string) => {
+        setItems((prev) =>
+            prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+        );
+    };
+
+    const moveItem = (index: number, direction: -1 | 1) => {
+        const newIndex = index + direction;
+        if (newIndex < 0 || newIndex >= items.length) return;
+        setItems((prev) => {
+            const next = [...prev];
+            [next[index], next[newIndex]] = [next[newIndex], next[index]];
+            return next;
+        });
+    };
+
+    const handleSave = () => {
+        const valid = items.filter((i) => i.label.trim());
+        if (valid.length === 0) {
+            toast.error("At least one option is required");
+            return;
+        }
+        const labels = valid.map((i) => i.label.trim());
+        if (new Set(labels).size !== labels.length) {
+            toast.error("Duplicate labels are not allowed");
+            return;
+        }
+        onSave(valid.map((i) => ({ label: i.label.trim(), color: i.color })));
+    };
+
+    return (
+        <Card className="bg-white">
+            <CardHeader>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <CardTitle className="text-lg">{ENUM_GROUP_LABELS[group]}</CardTitle>
+                        <CardDescription>Manage the available options for {ENUM_GROUP_LABELS[group].toLowerCase()}</CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={addItem}>
+                            <Plus className="mr-1 h-4 w-4" /> Add
+                        </Button>
+                        <Button size="sm" onClick={handleSave} disabled={!hasChanges || isSaving}>
+                            {isSaving ? "Saving..." : "Save"}
+                        </Button>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="space-y-2">
+                    {items.map((item, index) => (
+                        <div
+                            key={index}
+                            className="flex items-center gap-2 rounded-lg border bg-slate-50 p-2"
+                        >
+                            <div className="flex flex-col">
+                                <button
+                                    className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                                    disabled={index === 0}
+                                    onClick={() => moveItem(index, -1)}
+                                >
+                                    <ArrowUp className="h-3 w-3" />
+                                </button>
+                                <button
+                                    className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                                    disabled={index === items.length - 1}
+                                    onClick={() => moveItem(index, 1)}
+                                >
+                                    <ArrowDown className="h-3 w-3" />
+                                </button>
+                            </div>
+                            <Input
+                                value={item.label}
+                                onChange={(e) => updateItem(index, "label", e.target.value)}
+                                placeholder="Label"
+                                className="max-w-xs bg-white"
+                            />
+                            <Select
+                                value={item.color}
+                                onValueChange={(v) => updateItem(index, "color", v)}
+                            >
+                                <SelectTrigger className="w-32 bg-white">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {AVAILABLE_COLORS.map((color) => (
+                                        <SelectItem key={color} value={color}>
+                                            <span className="flex items-center gap-2">
+                                                <span
+                                                    className={`inline-block h-3 w-3 rounded-full ${COLOR_BADGE_CLASSES[color].split(" ")[0]}`}
+                                                />
+                                                {color}
+                                            </span>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <span className={`whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${COLOR_BADGE_CLASSES[item.color] ?? COLOR_BADGE_CLASSES.gray}`}>
+                                {item.label || "Preview"}
+                            </span>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="ml-auto text-red-600 hover:text-red-700"
+                                onClick={() => removeItem(index)}
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+            </CardContent>
+        </Card>
     );
 }

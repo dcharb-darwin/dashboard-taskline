@@ -48,11 +48,10 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { groupByPhase, getPhaseColor } from "@/lib/phase-utils";
+import { useEnums, getBadgeClass } from "@/contexts/EnumContext";
 
-type TaskStatus = "Not Started" | "In Progress" | "Complete" | "On Hold";
-type TaskPriority = "High" | "Medium" | "Low";
-type BulkStatus = TaskStatus | "unchanged";
-type BulkPriority = TaskPriority | "unchanged";
+type BulkStatus = string;
+type BulkPriority = string;
 
 type DependencyIssue = {
   type: "missing_dependency" | "date_conflict" | "cycle";
@@ -112,6 +111,7 @@ export default function ProjectDetail() {
   const [, setLocation] = useLocation();
   const search = useSearch();
   const projectId = parseInt(params.id || "0", 10);
+  const enums = useEnums();
 
   const [editingTask, setEditingTask] = useState<any>(null);
   const [showAddTask, setShowAddTask] = useState(false);
@@ -331,12 +331,10 @@ export default function ProjectDetail() {
     return 0;
   });
 
-  const tasksByStatus = {
-    "Not Started": sortedTasks.filter((task) => task.status === "Not Started"),
-    "In Progress": sortedTasks.filter((task) => task.status === "In Progress"),
-    Complete: sortedTasks.filter((task) => task.status === "Complete"),
-    "On Hold": sortedTasks.filter((task) => task.status === "On Hold"),
-  };
+  const tasksByStatus: Record<string, typeof sortedTasks> = {};
+  for (const opt of enums.taskStatus) {
+    tasksByStatus[opt.label] = sortedTasks.filter((task) => task.status === opt.label);
+  }
 
   const uniqueOwners = Array.from(
     new Set(tasks?.map((task) => task.owner).filter(Boolean) || [])
@@ -465,16 +463,7 @@ export default function ProjectDetail() {
             <div className="flex items-center gap-3">
               <h2 className="text-3xl font-bold tracking-tight">{project.name}</h2>
               <span
-                className={`rounded-full px-3 py-1 text-sm font-medium ${project.status === "Active"
-                  ? "bg-green-100 text-green-700"
-                  : project.status === "Planning"
-                    ? "bg-blue-100 text-blue-700"
-                    : project.status === "On Hold"
-                      ? "bg-yellow-100 text-yellow-700"
-                      : project.status === "Closeout"
-                        ? "bg-orange-100 text-orange-700"
-                        : "bg-gray-100 text-gray-700"
-                  }`}
+                className={`rounded-full px-3 py-1 text-sm font-medium ${getBadgeClass(enums.projectStatus, project.status)}`}
               >
                 {project.status}
               </span>
@@ -613,10 +602,9 @@ export default function ProjectDetail() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="Not Started">Not Started</SelectItem>
-                  <SelectItem value="In Progress">In Progress</SelectItem>
-                  <SelectItem value="Complete">Complete</SelectItem>
-                  <SelectItem value="On Hold">On Hold</SelectItem>
+                  {enums.taskStatus.map((opt) => (
+                    <SelectItem key={opt.label} value={opt.label}>{opt.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
 
@@ -626,9 +614,9 @@ export default function ProjectDetail() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Priority</SelectItem>
-                  <SelectItem value="High">High</SelectItem>
-                  <SelectItem value="Medium">Medium</SelectItem>
-                  <SelectItem value="Low">Low</SelectItem>
+                  {enums.taskPriority.map((opt) => (
+                    <SelectItem key={opt.label} value={opt.label}>{opt.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
 
@@ -772,11 +760,7 @@ export default function ProjectDetail() {
                                       <p className="font-medium">{task.taskDescription}</p>
                                     </div>
                                     <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${task.status === "Complete" ? "bg-green-100 text-green-700"
-                                        : task.status === "In Progress" ? "bg-blue-100 text-blue-700"
-                                          : task.status === "On Hold" ? "bg-yellow-100 text-yellow-700"
-                                            : "bg-slate-100 text-slate-700"
-                                        }`}>{task.status}</span>
+                                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${getBadgeClass(enums.taskStatus, task.status)}`}>{task.status}</span>
                                       {task.owner ? <span>Owner: {task.owner}</span> : null}
                                       {task.dueDate ? (
                                         <span>
@@ -1020,10 +1004,9 @@ export default function ProjectDetail() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unchanged">Unchanged</SelectItem>
-                    <SelectItem value="Not Started">Not Started</SelectItem>
-                    <SelectItem value="In Progress">In Progress</SelectItem>
-                    <SelectItem value="Complete">Complete</SelectItem>
-                    <SelectItem value="On Hold">On Hold</SelectItem>
+                    {enums.taskStatus.map((opt) => (
+                      <SelectItem key={opt.label} value={opt.label}>{opt.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -1046,9 +1029,9 @@ export default function ProjectDetail() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unchanged">Unchanged</SelectItem>
-                    <SelectItem value="High">High</SelectItem>
-                    <SelectItem value="Medium">Medium</SelectItem>
-                    <SelectItem value="Low">Low</SelectItem>
+                    {enums.taskPriority.map((opt) => (
+                      <SelectItem key={opt.label} value={opt.label}>{opt.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

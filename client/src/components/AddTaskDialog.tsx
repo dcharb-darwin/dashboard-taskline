@@ -10,6 +10,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { parseDateInputValue } from "@/lib/dateInput";
+import { useEnums } from "@/contexts/EnumContext";
 
 interface AddTaskDialogProps {
   projectId: number;
@@ -37,6 +38,7 @@ const initialFormData = {
 
 export function AddTaskDialog({ projectId, open, onOpenChange, onSuccess }: AddTaskDialogProps) {
   const [formData, setFormData] = useState(initialFormData);
+  const enums = useEnums();
 
   const createTask = trpc.tasks.create.useMutation({
     onSuccess: () => {
@@ -144,10 +146,9 @@ export function AddTaskDialog({ projectId, open, onOpenChange, onSuccess }: AddT
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Not Started">Not Started</SelectItem>
-                    <SelectItem value="In Progress">In Progress</SelectItem>
-                    <SelectItem value="Complete">Complete</SelectItem>
-                    <SelectItem value="On Hold">On Hold</SelectItem>
+                    {enums.taskStatus.map((opt) => (
+                      <SelectItem key={opt.label} value={opt.label}>{opt.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -159,9 +160,9 @@ export function AddTaskDialog({ projectId, open, onOpenChange, onSuccess }: AddT
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="High">High</SelectItem>
-                    <SelectItem value="Medium">Medium</SelectItem>
-                    <SelectItem value="Low">Low</SelectItem>
+                    {enums.taskPriority.map((opt) => (
+                      <SelectItem key={opt.label} value={opt.label}>{opt.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

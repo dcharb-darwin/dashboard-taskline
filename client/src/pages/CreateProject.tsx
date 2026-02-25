@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { normalizeTemplateKey, parseTemplateTasks } from "@/lib/template";
 import { parseDateInputValue } from "@/lib/dateInput";
+import { useEnums } from "@/contexts/EnumContext";
 import { Link, useLocation, useSearch } from "wouter";
 import {
   ArrowLeft, FolderKanban, Check, ChevronDown, ChevronUp,
@@ -41,6 +42,7 @@ export default function CreateProject() {
   const search = useSearch();
   const { data: templates } = trpc.templates.list.useQuery();
   const [showTaskPreview, setShowTaskPreview] = useState(false);
+  const enums = useEnums();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -363,11 +365,9 @@ export default function CreateProject() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Planning">Planning</SelectItem>
-                        <SelectItem value="Active">Active</SelectItem>
-                        <SelectItem value="On Hold">On Hold</SelectItem>
-                        <SelectItem value="Closeout">Closeout</SelectItem>
-                        <SelectItem value="Complete">Complete</SelectItem>
+                        {enums.projectStatus.map((opt) => (
+                          <SelectItem key={opt.label} value={opt.label}>{opt.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>

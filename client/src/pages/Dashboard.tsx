@@ -16,22 +16,19 @@ import {
 import { format } from "date-fns";
 import { ViewToggle } from "@/components/ViewToggle";
 import { useViewMode } from "@/hooks/useViewMode";
-
-const statusBadge = (status: string) => {
-  const cls =
-    status === "Active" ? "bg-green-100 text-green-700"
-      : status === "Planning" ? "bg-blue-100 text-blue-700"
-        : status === "On Hold" ? "bg-yellow-100 text-yellow-700"
-          : status === "Closeout" ? "bg-orange-100 text-orange-700"
-            : "bg-gray-100 text-gray-700";
-  return `whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${cls}`;
-};
+import { useEnums, getBadgeClass } from "@/contexts/EnumContext";
 
 export default function Dashboard() {
   const { data: stats, isLoading } = trpc.dashboard.stats.useQuery();
   const { data: portfolio } = trpc.dashboard.portfolioSummary.useQuery();
   const { data: projects } = trpc.projects.list.useQuery();
   const [viewMode, setViewMode] = useViewMode("dashboard-projects");
+  const enums = useEnums();
+
+  const statusBadge = (status: string) => {
+    const cls = getBadgeClass(enums.projectStatus, status);
+    return `whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${cls}`;
+  };
 
   if (isLoading) {
     return (

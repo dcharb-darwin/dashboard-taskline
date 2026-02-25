@@ -15,7 +15,7 @@ const templateTaskInputSchema = z
     description: z.string().optional(),
     phase: z.string().optional(),
     milestone: z.string().optional(),
-    priority: z.enum(["High", "Medium", "Low"]).optional(),
+    priority: z.string().optional(),
     owner: z.string().optional(),
     dependency: z.string().optional(),
     durationDays: z.number().int().min(0).optional(),
@@ -112,7 +112,7 @@ const ensureTaskDateRange = (
 const applyTaskWorkflowGuardrails = (
   current: { status: string; completionPercent: number },
   patch: {
-    status?: "Not Started" | "In Progress" | "Complete" | "On Hold";
+    status?: string;
     completionPercent?: number;
   }
 ) => {
@@ -245,6 +245,30 @@ export const appRouter = router({
         success: true,
       } as const;
     }),
+  }),
+
+  // Configurable enums
+  enums: router({
+    list: publicProcedure.query(async () => {
+      const { getAllEnums } = await import("./db");
+      return getAllEnums();
+    }),
+    update: adminProcedure
+      .input(
+        z.object({
+          group: z.enum(["projectStatus", "taskStatus", "taskPriority", "riskStatus"]),
+          options: z.array(
+            z.object({
+              label: z.string().min(1),
+              color: z.string().min(1),
+            })
+          ).min(1),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { setEnumOptions } = await import("./db");
+        return setEnumOptions(input.group, input.options);
+      }),
   }),
 
   // Templates router
@@ -541,7 +565,7 @@ export const appRouter = router({
             actualBudget: z.number().int().min(0).optional(),
             externalId: z.string().optional(),
             metadata: z.string().optional(),
-            status: z.enum(["Planning", "Active", "On Hold", "Closeout", "Complete"]).optional(),
+            status: z.string().optional(),
           })
           .superRefine((value, ctx) => {
             ensureProjectDateRange(value, ctx);
@@ -649,7 +673,7 @@ export const appRouter = router({
             actualBudget: z.number().int().min(0).optional(),
             externalId: z.string().nullable().optional(),
             metadata: z.string().nullable().optional(),
-            status: z.enum(["Planning", "Active", "On Hold", "Closeout", "Complete"]).optional(),
+            status: z.string().optional(),
           })
           .superRefine((value, ctx) => {
             ensureProjectDateRange(value, ctx);
@@ -714,8 +738,8 @@ export const appRouter = router({
             durationDays: z.number().int().min(0).optional(),
             dependency: z.string().optional(),
             owner: z.string().optional(),
-            status: z.enum(["Not Started", "In Progress", "Complete", "On Hold"]).optional(),
-            priority: z.enum(["High", "Medium", "Low"]).optional(),
+            status: z.string().optional(),
+            priority: z.string().optional(),
             phase: z.string().optional(),
             milestone: z.string().optional(),
             budget: z.number().int().min(0).optional(),
@@ -767,8 +791,8 @@ export const appRouter = router({
             durationDays: z.number().int().min(0).optional(),
             dependency: z.string().optional(),
             owner: z.string().optional(),
-            status: z.enum(["Not Started", "In Progress", "Complete", "On Hold"]).optional(),
-            priority: z.enum(["High", "Medium", "Low"]).optional(),
+            status: z.string().optional(),
+            priority: z.string().optional(),
             phase: z.string().optional(),
             milestone: z.string().optional(),
             budget: z.number().int().min(0).optional(),
@@ -833,8 +857,8 @@ export const appRouter = router({
           patch: z
             .object({
               owner: z.string().optional(),
-              status: z.enum(["Not Started", "In Progress", "Complete", "On Hold"]).optional(),
-              priority: z.enum(["High", "Medium", "Low"]).optional(),
+              status: z.string().optional(),
+              priority: z.string().optional(),
               phase: z.string().optional(),
               milestone: z.string().optional(),
               startDate: z.date().optional(),
@@ -1503,7 +1527,7 @@ export const appRouter = router({
           description: z.string().optional(),
           probability: z.number().int().min(1).max(5).optional(),
           impact: z.number().int().min(1).max(5).optional(),
-          status: z.enum(["Open", "Mitigated", "Accepted", "Closed"]).optional(),
+          status: z.string().optional(),
           mitigationPlan: z.string().optional(),
           owner: z.string().optional(),
           linkedTaskId: z.number().optional(),
@@ -1522,7 +1546,7 @@ export const appRouter = router({
           description: z.string().optional(),
           probability: z.number().int().min(1).max(5).optional(),
           impact: z.number().int().min(1).max(5).optional(),
-          status: z.enum(["Open", "Mitigated", "Accepted", "Closed"]).optional(),
+          status: z.string().optional(),
           mitigationPlan: z.string().optional(),
           owner: z.string().optional(),
           linkedTaskId: z.number().nullable().optional(),

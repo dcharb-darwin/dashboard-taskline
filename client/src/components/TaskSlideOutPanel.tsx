@@ -16,6 +16,7 @@ import { X, Save, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
+import { useEnums } from "@/contexts/EnumContext";
 
 type SlideOutTask = {
     id: number;
@@ -45,6 +46,7 @@ export default function TaskSlideOutPanel({
     onClose: () => void;
     onSaved?: () => void;
 }) {
+    const enums = useEnums();
     const [draft, setDraft] = useState({
         taskDescription: task.taskDescription,
         status: task.status,
@@ -85,8 +87,8 @@ export default function TaskSlideOutPanel({
         updateTask.mutate({
             id: task.id,
             taskDescription: draft.taskDescription,
-            status: draft.status as "Not Started" | "In Progress" | "Complete" | "On Hold",
-            priority: draft.priority as "High" | "Medium" | "Low",
+            status: draft.status,
+            priority: draft.priority,
             owner: draft.owner || undefined,
             completionPercent: draft.completionPercent,
             dependency: draft.dependency || undefined,
@@ -142,10 +144,9 @@ export default function TaskSlideOutPanel({
                         <Select value={draft.status} onValueChange={(v) => setDraft((p) => ({ ...p, status: v }))}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="Not Started">Not Started</SelectItem>
-                                <SelectItem value="In Progress">In Progress</SelectItem>
-                                <SelectItem value="On Hold">On Hold</SelectItem>
-                                <SelectItem value="Complete">Complete</SelectItem>
+                                {enums.taskStatus.map((opt) => (
+                                    <SelectItem key={opt.label} value={opt.label}>{opt.label}</SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </div>
@@ -154,9 +155,9 @@ export default function TaskSlideOutPanel({
                         <Select value={draft.priority} onValueChange={(v) => setDraft((p) => ({ ...p, priority: v }))}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="High">High</SelectItem>
-                                <SelectItem value="Medium">Medium</SelectItem>
-                                <SelectItem value="Low">Low</SelectItem>
+                                {enums.taskPriority.map((opt) => (
+                                    <SelectItem key={opt.label} value={opt.label}>{opt.label}</SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </div>

@@ -25,23 +25,14 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import TaskSlideOutPanel from "@/components/TaskSlideOutPanel";
 import { getPhaseColor, parsePhaseOrder } from "@/lib/phase-utils";
+import { useEnums, getBadgeClass } from "@/contexts/EnumContext";
 
-const statusColors: Record<string, string> = {
-    "Not Started": "bg-slate-100 text-slate-700",
-    "In Progress": "bg-blue-100 text-blue-700",
-    "On Hold": "bg-amber-100 text-amber-700",
-    "Complete": "bg-green-100 text-green-700",
-};
 
-const priorityColors: Record<string, string> = {
-    High: "bg-red-50 text-red-700",
-    Medium: "bg-amber-50 text-amber-700",
-    Low: "bg-green-50 text-green-700",
-};
 
 export default function Tasks() {
     const { data: allTasks, isLoading: tasksLoading, refetch } = trpc.tasks.listAll.useQuery();
     const { data: projects } = trpc.projects.list.useQuery();
+    const enums = useEnums();
 
     const [filterStatus, setFilterStatus] = useState("all");
     const [filterPriority, setFilterPriority] = useState("all");
@@ -137,7 +128,7 @@ export default function Tasks() {
         }
     };
 
-    const bulkUpdateStatus = (status: "Not Started" | "In Progress" | "Complete" | "On Hold") => {
+    const bulkUpdateStatus = (status: string) => {
         const ids = Array.from(selectedIds);
         Promise.all(ids.map((id) => updateTask.mutateAsync({ id, status }))).then(() => {
             setSelectedIds(new Set());
@@ -191,19 +182,18 @@ export default function Tasks() {
                                 <SelectTrigger className="w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">All Status</SelectItem>
-                                    <SelectItem value="Not Started">Not Started</SelectItem>
-                                    <SelectItem value="In Progress">In Progress</SelectItem>
-                                    <SelectItem value="On Hold">On Hold</SelectItem>
-                                    <SelectItem value="Complete">Complete</SelectItem>
+                                    {enums.taskStatus.map((opt) => (
+                                        <SelectItem key={opt.label} value={opt.label}>{opt.label}</SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                             <Select value={filterPriority} onValueChange={setFilterPriority}>
                                 <SelectTrigger className="w-[130px]"><SelectValue placeholder="Priority" /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">All Priority</SelectItem>
-                                    <SelectItem value="High">High</SelectItem>
-                                    <SelectItem value="Medium">Medium</SelectItem>
-                                    <SelectItem value="Low">Low</SelectItem>
+                                    {enums.taskPriority.map((opt) => (
+                                        <SelectItem key={opt.label} value={opt.label}>{opt.label}</SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                             <Select value={filterProject} onValueChange={setFilterProject}>
@@ -443,6 +433,7 @@ function TaskRow({
     onClick: () => void;
     formatDate: (d: Date | null) => string;
 }) {
+    const enums = useEnums();
     return (
         <div
             className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-slate-50 ${isSelected ? "ring-2 ring-blue-400" : ""}`}
@@ -458,10 +449,10 @@ function TaskRow({
                     <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium">
                         {task.taskId}
                     </span>
-                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${statusColors[task.status] ?? ""}`}>
+                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${getBadgeClass(enums.taskStatus, task.status)}`}>
                         {task.status}
                     </span>
-                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${priorityColors[task.priority] ?? ""}`}>
+                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${getBadgeClass(enums.taskPriority, task.priority)}`}>
                         {task.priority}
                     </span>
                     {task.phase && (

@@ -37,6 +37,13 @@ The app will be available at **http://localhost:3000**.
 - Gantt bar click opens slide-out panel
 - Bulk select + action bar works
 
+**Phase 4 (Gen2 Integration Fields)**
+- Create a new project — verify `Closeout` appears in status dropdown
+- Edit an existing project — verify `Closeout` status is selectable
+- Verify existing status workflow (Planning → Active → Complete) unchanged
+- Projects page status filter includes `Closeout`
+- Calendar and Gantt views render `Closeout` projects normally
+
 ### Stop Dev Server
 3. When done, stop the server with Ctrl+C or by terminating the command.
 
