@@ -1056,7 +1056,6 @@ const buildMemoryState = (): MemoryState => {
         updatedAt: new Date(seedTimestamp),
       },
       ...(() => {
-        const { DEFAULT_ENUMS, enumSettingKey } = require("../shared/enums");
         const groups = Object.keys(DEFAULT_ENUMS) as Array<keyof typeof DEFAULT_ENUMS>;
         return groups.map((group, i) => ({
           id: 3 + i,

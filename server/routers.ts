@@ -253,7 +253,7 @@ export const appRouter = router({
       const { getAllEnums } = await import("./db");
       return getAllEnums();
     }),
-    update: adminProcedure
+    update: publicProcedure
       .input(
         z.object({
           group: z.enum(["projectStatus", "taskStatus", "taskPriority", "riskStatus"]),
