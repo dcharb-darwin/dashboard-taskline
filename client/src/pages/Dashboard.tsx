@@ -14,11 +14,24 @@ import {
   Plus,
 } from "lucide-react";
 import { format } from "date-fns";
+import { ViewToggle } from "@/components/ViewToggle";
+import { useViewMode } from "@/hooks/useViewMode";
+
+const statusBadge = (status: string) => {
+  const cls =
+    status === "Active" ? "bg-green-100 text-green-700"
+      : status === "Planning" ? "bg-blue-100 text-blue-700"
+        : status === "On Hold" ? "bg-yellow-100 text-yellow-700"
+          : status === "Closeout" ? "bg-orange-100 text-orange-700"
+            : "bg-gray-100 text-gray-700";
+  return `whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${cls}`;
+};
 
 export default function Dashboard() {
   const { data: stats, isLoading } = trpc.dashboard.stats.useQuery();
   const { data: portfolio } = trpc.dashboard.portfolioSummary.useQuery();
   const { data: projects } = trpc.projects.list.useQuery();
+  const [viewMode, setViewMode] = useViewMode("dashboard-projects");
 
   if (isLoading) {
     return (
@@ -189,9 +202,12 @@ export default function Dashboard() {
 
         <div className="grid gap-6 lg:grid-cols-2">
           <Card className="bg-white">
-            <CardHeader>
-              <CardTitle>Recent Projects</CardTitle>
-              <CardDescription>Latest projects created</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Recent Projects</CardTitle>
+                <CardDescription>Latest projects created</CardDescription>
+              </div>
+              <ViewToggle mode={viewMode} onModeChange={setViewMode} />
             </CardHeader>
             <CardContent>
               {recentProjects.length === 0 ? (
@@ -203,6 +219,33 @@ export default function Dashboard() {
                       Create Your First Project
                     </Button>
                   </Link>
+                </div>
+              ) : viewMode === "table" ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-slate-50 text-left">
+                        <th className="px-3 py-2 font-medium text-muted-foreground">Name</th>
+                        <th className="px-3 py-2 font-medium text-muted-foreground">Template</th>
+                        <th className="px-3 py-2 font-medium text-muted-foreground">Status</th>
+                        <th className="px-3 py-2 font-medium text-muted-foreground">PM</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentProjects.map((project) => (
+                        <Link key={project.id} href={`/projects/${project.id}`}>
+                          <tr className="cursor-pointer border-b transition-colors hover:bg-slate-50">
+                            <td className="px-3 py-2 font-medium">{project.name}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{formatTemplateLabel(project.templateType)}</td>
+                            <td className="px-3 py-2">
+                              <span className={statusBadge(project.status)}>{project.status}</span>
+                            </td>
+                            <td className="px-3 py-2 text-muted-foreground">{project.projectManager || "—"}</td>
+                          </tr>
+                        </Link>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -216,18 +259,7 @@ export default function Dashboard() {
                           </p>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span
-                            className={`rounded-full px-2 py-1 text-xs font-medium ${project.status === "Active"
-                              ? "bg-green-100 text-green-700"
-                              : project.status === "Planning"
-                                ? "bg-blue-100 text-blue-700"
-                                : project.status === "On Hold"
-                                  ? "bg-yellow-100 text-yellow-700"
-                                  : project.status === "Closeout"
-                                    ? "bg-orange-100 text-orange-700"
-                                    : "bg-gray-100 text-gray-700"
-                              }`}
-                          >
+                          <span className={statusBadge(project.status)}>
                             {project.status}
                           </span>
                         </div>

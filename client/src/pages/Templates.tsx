@@ -41,6 +41,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import DependencyPicker from "@/components/DependencyPicker";
+import { ViewToggle } from "@/components/ViewToggle";
+import { useViewMode } from "@/hooks/useViewMode";
 
 type EditableTemplateTask = {
   taskId: string;
@@ -110,6 +112,7 @@ export default function Templates() {
   const updateTemplateTasks = trpc.templates.update.useMutation();
   const exportTemplateMutation = trpc.templateTransfer.export.useMutation();
   const importTemplateMutation = trpc.templateTransfer.import.useMutation();
+  const [viewMode, setViewMode] = useViewMode("templates");
 
   const templateIcons: Record<string, React.ElementType> = {
     marketing_campaign: Megaphone,
@@ -322,6 +325,7 @@ export default function Templates() {
             <Upload className="mr-2 h-4 w-4" />
             {importTemplateMutation.isPending ? "Importing..." : "Import Template"}
           </Button>
+          <ViewToggle mode={viewMode} onModeChange={setViewMode} />
         </div>
 
         {isLoading ? (
@@ -331,38 +335,78 @@ export default function Templates() {
             ))}
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {templates?.map((template) => {
-              const iconKey = normalizeTemplateKey(template.templateKey || template.name);
-              const Icon = templateIcons[iconKey] || FolderKanban;
-              const taskCount = parseTemplateTasks(template.sampleTasks).length;
+          viewMode === "table" ? (
+            <Card className="bg-white">
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-slate-50 text-left">
+                        <th className="px-4 py-3 font-medium text-muted-foreground">Name</th>
+                        <th className="px-4 py-3 font-medium text-muted-foreground">Description</th>
+                        <th className="px-4 py-3 font-medium text-muted-foreground">Tasks</th>
+                        <th className="px-4 py-3 font-medium text-muted-foreground">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {templates?.map((template) => {
+                        const taskCount = parseTemplateTasks(template.sampleTasks).length;
+                        return (
+                          <tr
+                            key={template.id}
+                            className="cursor-pointer border-b transition-colors hover:bg-slate-50"
+                            onClick={() => setSelectedTemplate(template)}
+                          >
+                            <td className="px-4 py-3 font-medium">{template.name}</td>
+                            <td className="max-w-md truncate px-4 py-3 text-muted-foreground">
+                              {template.description || "—"}
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">{taskCount}</td>
+                            <td className="px-4 py-3">
+                              <Button variant="outline" size="sm">View Details</Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {templates?.map((template) => {
+                const iconKey = normalizeTemplateKey(template.templateKey || template.name);
+                const Icon = templateIcons[iconKey] || FolderKanban;
+                const taskCount = parseTemplateTasks(template.sampleTasks).length;
 
-              return (
-                <Card
-                  key={template.id}
-                  className="cursor-pointer bg-white transition-shadow hover:shadow-lg"
-                  onClick={() => setSelectedTemplate(template)}
-                >
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="mb-3 rounded-lg bg-blue-50 p-3">
-                        <Icon className="h-8 w-8 text-blue-600" />
+                return (
+                  <Card
+                    key={template.id}
+                    className="cursor-pointer bg-white transition-shadow hover:shadow-lg"
+                    onClick={() => setSelectedTemplate(template)}
+                  >
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="mb-3 rounded-lg bg-blue-50 p-3">
+                          <Icon className="h-8 w-8 text-blue-600" />
+                        </div>
+                        <FileText className="h-5 w-5 text-muted-foreground" />
                       </div>
-                      <FileText className="h-5 w-5 text-muted-foreground" />
-                    </div>
-                    <CardTitle className="text-lg">{template.name}</CardTitle>
-                    <CardDescription className="line-clamp-2">{template.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <p className="text-sm text-muted-foreground">{taskCount} template tasks</p>
-                    <Button variant="outline" className="w-full" size="sm">
-                      View Details
-                    </Button>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
+                      <CardTitle className="text-lg">{template.name}</CardTitle>
+                      <CardDescription className="line-clamp-2">{template.description}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <p className="text-sm text-muted-foreground">{taskCount} template tasks</p>
+                      <Button variant="outline" className="w-full" size="sm">
+                        View Details
+                      </Button>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )
         )}
       </div>
 

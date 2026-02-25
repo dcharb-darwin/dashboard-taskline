@@ -8,6 +8,18 @@ import { Link, useSearch } from "wouter";
 import { FolderKanban, Plus, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
+import { ViewToggle } from "@/components/ViewToggle";
+import { useViewMode } from "@/hooks/useViewMode";
+
+const statusBadge = (status: string) => {
+  const cls =
+    status === "Active" ? "bg-green-100 text-green-700"
+      : status === "Planning" ? "bg-blue-100 text-blue-700"
+        : status === "On Hold" ? "bg-yellow-100 text-yellow-700"
+          : status === "Closeout" ? "bg-orange-100 text-orange-700"
+            : "bg-gray-100 text-gray-700";
+  return `whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${cls}`;
+};
 
 export default function Projects() {
   const { data: projects, isLoading } = trpc.projects.list.useQuery();
@@ -16,6 +28,7 @@ export default function Projects() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [healthFilter, setHealthFilter] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useViewMode("projects");
 
   useEffect(() => {
     const searchParams = new URLSearchParams(search);
@@ -130,6 +143,7 @@ export default function Projects() {
                   Complete
                 </Button>
               </div>
+              <ViewToggle mode={viewMode} onModeChange={setViewMode} />
             </div>
           </CardContent>
         </Card>
@@ -141,59 +155,87 @@ export default function Projects() {
             ))}
           </div>
         ) : filteredProjects && filteredProjects.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredProjects.map((project) => (
-              <Link key={project.id} href={`/projects/${project.id}`}>
-                <Card className="h-full cursor-pointer bg-white transition-shadow hover:shadow-lg">
-                  <CardContent className="pt-6">
-                    <div className="space-y-3">
-                      <div className="flex items-start justify-between">
-                        <h3 className="line-clamp-2 text-lg font-semibold">{project.name}</h3>
-                        <span
-                          className={`ml-2 whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${project.status === "Active"
-                            ? "bg-green-100 text-green-700"
-                            : project.status === "Planning"
-                              ? "bg-blue-100 text-blue-700"
-                              : project.status === "On Hold"
-                                ? "bg-yellow-100 text-yellow-700"
-                                : project.status === "Closeout"
-                                  ? "bg-orange-100 text-orange-700"
-                                  : "bg-gray-100 text-gray-700"
-                            }`}
-                        >
-                          {project.status}
-                        </span>
-                      </div>
+          viewMode === "table" ? (
+            <Card className="bg-white">
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-slate-50 text-left">
+                        <th className="px-4 py-3 font-medium text-muted-foreground">Name</th>
+                        <th className="px-4 py-3 font-medium text-muted-foreground">Template</th>
+                        <th className="px-4 py-3 font-medium text-muted-foreground">PM</th>
+                        <th className="px-4 py-3 font-medium text-muted-foreground">Status</th>
+                        <th className="px-4 py-3 font-medium text-muted-foreground">Due Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredProjects.map((project) => (
+                        <Link key={project.id} href={`/projects/${project.id}`}>
+                          <tr className="cursor-pointer border-b transition-colors hover:bg-slate-50">
+                            <td className="px-4 py-3 font-medium">{project.name}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{formatTemplateLabel(project.templateType)}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{project.projectManager || "—"}</td>
+                            <td className="px-4 py-3">
+                              <span className={statusBadge(project.status)}>{project.status}</span>
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {project.targetCompletionDate
+                                ? format(new Date(project.targetCompletionDate), "MMM d, yyyy")
+                                : "—"}
+                            </td>
+                          </tr>
+                        </Link>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {filteredProjects.map((project) => (
+                <Link key={project.id} href={`/projects/${project.id}`}>
+                  <Card className="h-full cursor-pointer bg-white transition-shadow hover:shadow-lg">
+                    <CardContent className="pt-6">
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between">
+                          <h3 className="line-clamp-2 text-lg font-semibold">{project.name}</h3>
+                          <span className={`ml-2 ${statusBadge(project.status)}`}>
+                            {project.status}
+                          </span>
+                        </div>
 
-                      <p className="line-clamp-2 text-sm text-muted-foreground">
-                        {project.description || "No description"}
-                      </p>
+                        <p className="line-clamp-2 text-sm text-muted-foreground">
+                          {project.description || "No description"}
+                        </p>
 
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span className="rounded bg-slate-100 px-2 py-1">
-                          {formatTemplateLabel(project.templateType)}
-                        </span>
-                      </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span className="rounded bg-slate-100 px-2 py-1">
+                            {formatTemplateLabel(project.templateType)}
+                          </span>
+                        </div>
 
-                      <div className="space-y-1 border-t pt-2 text-sm">
-                        {project.projectManager && (
-                          <p className="text-muted-foreground">
-                            <span className="font-medium">PM:</span> {project.projectManager}
-                          </p>
-                        )}
-                        {project.targetCompletionDate && (
-                          <p className="text-muted-foreground">
-                            <span className="font-medium">Due:</span>{" "}
-                            {format(new Date(project.targetCompletionDate), "MMM d, yyyy")}
-                          </p>
-                        )}
+                        <div className="space-y-1 border-t pt-2 text-sm">
+                          {project.projectManager && (
+                            <p className="text-muted-foreground">
+                              <span className="font-medium">PM:</span> {project.projectManager}
+                            </p>
+                          )}
+                          {project.targetCompletionDate && (
+                            <p className="text-muted-foreground">
+                              <span className="font-medium">Due:</span>{" "}
+                              {format(new Date(project.targetCompletionDate), "MMM d, yyyy")}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          )
         ) : (
           <Card className="bg-white">
             <CardContent className="py-12">

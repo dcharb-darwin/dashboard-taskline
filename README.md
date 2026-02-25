@@ -83,8 +83,8 @@ See detailed guides in [`docs/setup/`](docs/setup/).
 
 ## Documentation
 
+- [Architecture Guide](docs/ARCHITECTURE.md)
 - [Setup Guides](docs/setup/)
-- [PRD](docs/PRD.md)
 - [Data Model](docs/DATA_MODEL.md)
 - [API Reference](docs/API_REFERENCE.md)
 - [Integration Guide](docs/INTEGRATION_GUIDE.md)
