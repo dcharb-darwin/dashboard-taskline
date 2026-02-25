@@ -1,7 +1,7 @@
 # Contributing
 
 ## Repository Model
-- `dev`: integration branch for active work.
+- `gen2`: integration branch for active work.
 - `staging`: release validation branch.
 - `main`: production-ready branch.
 

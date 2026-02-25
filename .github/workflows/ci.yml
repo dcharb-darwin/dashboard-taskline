@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - dev
+      - gen2
       - staging
       - "codex/**"
   pull_request:

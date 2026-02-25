@@ -23,7 +23,7 @@ Before deleting files or doing broad cleanup:
 
 ## Commit/push flow
 
-1. Base from `dev`.
+1. Base from `gen2`.
 2. Create or switch to target branch (for release testing use `staging`).
 3. Run validation: `npm run check`, `npm run test`, `npm run build`.
 4. Commit with clear scope and push branch to origin.

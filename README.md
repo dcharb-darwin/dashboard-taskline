@@ -78,7 +78,7 @@ See detailed guides in [`docs/setup/`](docs/setup/).
 | Branch | Purpose |
 |--------|---------|
 | `main` | Production-ready |
-| `dev` | Current development |
+| `gen2` | Current development |
 | `staging` | Release validation |
 
 ## Documentation
