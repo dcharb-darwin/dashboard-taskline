@@ -17,10 +17,13 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Link, useParams, useLocation, useSearch } from "wouter";
 import {
+  Activity,
   AlertTriangle,
   ArrowLeft,
   BellRing,
   CheckSquare,
+  ChevronDown,
+  ChevronRight,
   Filter,
   History,
   MessageSquare,
@@ -33,6 +36,9 @@ import { useEffect, useMemo, useState } from "react";
 import { EditTaskDialog } from "@/components/EditTaskDialog";
 import { AddTaskDialog } from "@/components/AddTaskDialog";
 import { EditProjectDialog } from "@/components/EditProjectDialog";
+import ProjectRisks from "@/components/ProjectRisks";
+import ProjectTagChips from "@/components/ProjectTagChips";
+import UnifiedActivityFeed from "@/components/UnifiedActivityFeed";
 import {
   Select,
   SelectContent,
@@ -41,6 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { groupByPhase, getPhaseColor } from "@/lib/phase-utils";
 
 type TaskStatus = "Not Started" | "In Progress" | "Complete" | "On Hold";
 type TaskPriority = "High" | "Medium" | "Low";
@@ -71,11 +78,11 @@ type CollaborationActivity = {
   taskId: number | null;
   actorName: string;
   eventType:
-    | "comment_added"
-    | "task_status_changed"
-    | "task_assignment_changed"
-    | "due_soon"
-    | "overdue";
+  | "comment_added"
+  | "task_status_changed"
+  | "task_assignment_changed"
+  | "due_soon"
+  | "overdue";
   summary: string;
   metadata: string | null;
   createdAt: Date | string;
@@ -93,26 +100,7 @@ type NotificationEventView = {
   metadata: string | null;
 };
 
-type NotificationPreferenceView = {
-  id: number;
-  scopeType: "user" | "team";
-  scopeKey: string;
-  channels: {
-    inApp: boolean;
-    email: boolean;
-    slack: boolean;
-    webhook: boolean;
-    webhookUrl: string;
-  };
-  events: {
-    overdue: boolean;
-    dueSoon: boolean;
-    assignmentChanged: boolean;
-    statusChanged: boolean;
-  };
-  createdAt: Date | string;
-  updatedAt: Date | string;
-};
+
 
 const formatCurrency = (value: number | null | undefined) =>
   value === null || value === undefined
@@ -133,6 +121,8 @@ export default function ProjectDetail() {
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [filterOwner, setFilterOwner] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("dueDate");
+  const [taskGroupBy, setTaskGroupBy] = useState<"status" | "phase">("status");
+  const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
   const highlightedTaskId = useMemo(() => {
     if (!search) return null;
     const searchParams = new URLSearchParams(search);
@@ -159,19 +149,12 @@ export default function ProjectDetail() {
     enforceDependencyReadiness: true,
   });
   const [dependencyWarnings, setDependencyWarnings] = useState<DependencyIssue[]>([]);
-  const [commentContent, setCommentContent] = useState("");
-  const [commentTaskScope, setCommentTaskScope] = useState("project");
-  const [preferenceDraft, setPreferenceDraft] =
-    useState<NotificationPreferenceView | null>(null);
+
 
   const { data: project, isLoading: projectLoading, refetch: refetchProject } =
     trpc.projects.getById.useQuery({ id: projectId });
   const { data: tasks, isLoading: tasksLoading, refetch: refetchTasks } =
     trpc.tasks.listByProject.useQuery({ projectId });
-  const { data: comments, refetch: refetchComments } =
-    trpc.collaboration.comments.list.useQuery({ projectId });
-  const { data: activityFeed, refetch: refetchActivityFeed } =
-    trpc.collaboration.activity.list.useQuery({ projectId, limit: 100 });
   const {
     data: notificationFeed,
     refetch: refetchNotificationFeed,
@@ -179,41 +162,13 @@ export default function ProjectDetail() {
     projectId,
     limit: 100,
   });
-  const { data: notificationPreference } =
-    trpc.collaboration.notificationPreferences.get.useQuery({
-      scopeType: "team",
-      scopeKey: "default",
-    });
+
 
   const deleteProject = trpc.projects.delete.useMutation({
     onSuccess: () => {
       setLocation("/projects");
     },
   });
-
-  const createComment = trpc.collaboration.comments.create.useMutation({
-    onSuccess: async () => {
-      setCommentContent("");
-      setCommentTaskScope("project");
-      toast.success("Comment added");
-      await Promise.all([refetchComments(), refetchActivityFeed()]);
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-  });
-
-  const saveNotificationPreference =
-    trpc.collaboration.notificationPreferences.set.useMutation({
-      onSuccess: async (nextPreference) => {
-        setPreferenceDraft(nextPreference as NotificationPreferenceView);
-        toast.success("Notification preferences saved");
-        await refetchNotificationFeed();
-      },
-      onError: (error) => {
-        toast.error(error.message);
-      },
-    });
 
   const generateDueAlerts =
     trpc.collaboration.notifications.generateDueAlerts.useMutation({
@@ -223,7 +178,7 @@ export default function ProjectDetail() {
         } else {
           toast.success(`Generated ${result.generatedCount} alert(s)`);
         }
-        await Promise.all([refetchNotificationFeed(), refetchActivityFeed()]);
+        await refetchNotificationFeed();
       },
       onError: (error) => {
         toast.error(error.message);
@@ -236,7 +191,6 @@ export default function ProjectDetail() {
       setDependencyWarnings(result.dependencyWarnings as DependencyIssue[]);
       await Promise.all([
         refetchTasks(),
-        refetchActivityFeed(),
         refetchNotificationFeed(),
       ]);
       setSelectedTaskIds([]);
@@ -319,10 +273,7 @@ export default function ProjectDetail() {
     setSelectedTaskIds((prev) => prev.filter((taskId) => availableIds.has(taskId)));
   }, [tasks]);
 
-  useEffect(() => {
-    if (!notificationPreference) return;
-    setPreferenceDraft(notificationPreference as NotificationPreferenceView);
-  }, [notificationPreference]);
+
 
   if (projectLoading) {
     return (
@@ -497,45 +448,7 @@ export default function ProjectDetail() {
     });
   };
 
-  const postComment = () => {
-    const content = commentContent.trim();
-    if (!content) {
-      toast.error("Comment cannot be empty");
-      return;
-    }
-    createComment.mutate({
-      projectId,
-      taskId:
-        commentTaskScope === "project"
-          ? undefined
-          : Number.parseInt(commentTaskScope, 10),
-      content,
-    });
-  };
 
-  const savePreferenceChanges = () => {
-    if (!preferenceDraft) return;
-    saveNotificationPreference.mutate({
-      scopeType: "team",
-      scopeKey: "default",
-      channels: preferenceDraft.channels,
-      events: preferenceDraft.events,
-    });
-  };
-
-  const commentTaskLabel = (taskId: number | null) => {
-    if (taskId === null) return "Project";
-    const task = tasks?.find((item) => item.id === taskId);
-    return task ? `${task.taskId} - ${task.taskDescription}` : `Task #${taskId}`;
-  };
-
-  const eventColorMap: Record<CollaborationActivity["eventType"], string> = {
-    comment_added: "bg-slate-100 text-slate-700",
-    task_status_changed: "bg-blue-100 text-blue-700",
-    task_assignment_changed: "bg-purple-100 text-purple-700",
-    due_soon: "bg-amber-100 text-amber-700",
-    overdue: "bg-red-100 text-red-700",
-  };
 
   return (
     <AppLayout>
@@ -552,20 +465,20 @@ export default function ProjectDetail() {
             <div className="flex items-center gap-3">
               <h2 className="text-3xl font-bold tracking-tight">{project.name}</h2>
               <span
-                className={`rounded-full px-3 py-1 text-sm font-medium ${
-                  project.status === "Active"
-                    ? "bg-green-100 text-green-700"
-                    : project.status === "Planning"
+                className={`rounded-full px-3 py-1 text-sm font-medium ${project.status === "Active"
+                  ? "bg-green-100 text-green-700"
+                  : project.status === "Planning"
                     ? "bg-blue-100 text-blue-700"
                     : project.status === "On Hold"
-                    ? "bg-yellow-100 text-yellow-700"
-                    : "bg-gray-100 text-gray-700"
-                }`}
+                      ? "bg-yellow-100 text-yellow-700"
+                      : "bg-gray-100 text-gray-700"
+                  }`}
               >
                 {project.status}
               </span>
             </div>
             <p className="text-muted-foreground">{project.description || "No description"}</p>
+            <ProjectTagChips projectId={projectId} />
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setShowEditProject(true)}>
@@ -633,11 +546,10 @@ export default function ProjectDetail() {
               <div>
                 <dt className="text-sm font-medium text-muted-foreground">Budget Variance</dt>
                 <dd
-                  className={`mt-1 text-sm ${
-                    budgetVariance !== null && budgetVariance > 0
-                      ? "text-red-600"
-                      : "text-emerald-700"
-                  }`}
+                  className={`mt-1 text-sm ${budgetVariance !== null && budgetVariance > 0
+                    ? "text-red-600"
+                    : "text-emerald-700"
+                    }`}
                 >
                   {budgetVariance === null
                     ? "Not available"
@@ -651,6 +563,8 @@ export default function ProjectDetail() {
             </dl>
           </CardContent>
         </Card>
+
+        <ProjectRisks projectId={projectId} />
 
         <Card className="bg-white">
           <CardHeader>
@@ -733,6 +647,16 @@ export default function ProjectDetail() {
               )}
 
               <div className="ml-auto flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Group by:</span>
+                <Select value={taskGroupBy} onValueChange={(v) => setTaskGroupBy(v as "status" | "phase")}>
+                  <SelectTrigger className="w-[110px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="status">Status</SelectItem>
+                    <SelectItem value="phase">Phase</SelectItem>
+                  </SelectContent>
+                </Select>
                 <span className="text-sm text-muted-foreground">Sort by:</span>
                 <Select value={sortBy} onValueChange={setSortBy}>
                   <SelectTrigger className="w-[130px]">
@@ -769,87 +693,214 @@ export default function ProjectDetail() {
                 ))}
               </div>
             ) : tasks && tasks.length > 0 ? (
-              <div className="space-y-6">
-                {Object.entries(tasksByStatus).map(([status, statusTasks]) =>
-                  statusTasks.length > 0 ? (
-                    <div key={status}>
-                      <h4 className="mb-3 text-sm font-semibold text-muted-foreground">
-                        {status} ({statusTasks.length})
-                      </h4>
-                      <div className="space-y-2">
-                        {statusTasks.map((task) => (
-                          <div
-                            key={task.id}
-                            id={`task-row-${task.id}`}
-                            className={`flex items-start justify-between rounded-lg border p-3 transition-colors hover:bg-slate-50 ${
-                              highlightedTaskId === task.id
-                                ? "ring-2 ring-blue-500 ring-offset-1 bg-blue-50/40"
-                                : ""
-                            }`}
+              taskGroupBy === "phase" ? (
+                /* ── Phase grouping ──────────────────────────────────── */
+                <div className="space-y-4">
+                  {groupByPhase(
+                    sortedTasks,
+                    (t) => t.phase,
+                    (t) => t.completionPercent ?? 0,
+                    (t) => t.startDate ? new Date(t.startDate) : null,
+                    (t) => t.dueDate ? new Date(t.dueDate) : null,
+                  ).map((phaseGroup, phaseIdx) => {
+                    const isCollapsed = collapsedPhases.has(phaseGroup.name);
+                    const colors = getPhaseColor(phaseIdx);
+                    return (
+                      <div key={phaseGroup.name} className="rounded-lg border">
+                        <button
+                          onClick={() => {
+                            setCollapsedPhases((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(phaseGroup.name)) next.delete(phaseGroup.name);
+                              else next.add(phaseGroup.name);
+                              return next;
+                            });
+                          }}
+                          className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+                        >
+                          {isCollapsed
+                            ? <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                          <span
+                            className="rounded px-2 py-0.5 text-xs font-semibold"
+                            style={{ backgroundColor: colors.bg, color: colors.bar }}
                           >
-                            <div className="flex flex-1 gap-3">
-                              <input
-                                type="checkbox"
-                                className="mt-1 h-4 w-4"
-                                checked={selectedTaskIds.includes(task.id)}
-                                onChange={() => toggleTaskSelection(task.id)}
+                            {phaseGroup.name}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            {phaseGroup.tasks.length} task{phaseGroup.tasks.length !== 1 ? "s" : ""}
+                          </span>
+                          <div className="ml-auto flex items-center gap-2">
+                            <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{ width: `${phaseGroup.progress}%`, backgroundColor: colors.bar }}
                               />
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-mono text-muted-foreground">
-                                    {task.taskId}
-                                  </span>
-                                  <p className="font-medium">{task.taskDescription}</p>
+                            </div>
+                            <span className="text-xs text-muted-foreground">{phaseGroup.progress}%</span>
+                          </div>
+                        </button>
+                        {!isCollapsed && (
+                          <div className="space-y-2 border-t px-3 py-2">
+                            {phaseGroup.tasks.map((task) => (
+                              <div
+                                key={task.id}
+                                id={`task-row-${task.id}`}
+                                className={`flex cursor-pointer items-start justify-between rounded-lg border p-3 transition-colors hover:bg-slate-50 ${highlightedTaskId === task.id
+                                  ? "ring-2 ring-blue-500 ring-offset-1 bg-blue-50/40"
+                                  : ""
+                                  }`}
+                                onClick={(e) => {
+                                  if ((e.target as HTMLElement).closest('input[type="checkbox"], button')) return;
+                                  setEditingTask(task);
+                                }}
+                              >
+                                <div className="flex flex-1 gap-3">
+                                  <input
+                                    type="checkbox"
+                                    className="mt-1 h-4 w-4"
+                                    checked={selectedTaskIds.includes(task.id)}
+                                    onChange={() => toggleTaskSelection(task.id)}
+                                  />
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-mono text-muted-foreground">
+                                        {task.taskId}
+                                      </span>
+                                      <p className="font-medium">{task.taskDescription}</p>
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${task.status === "Complete" ? "bg-green-100 text-green-700"
+                                        : task.status === "In Progress" ? "bg-blue-100 text-blue-700"
+                                          : task.status === "On Hold" ? "bg-yellow-100 text-yellow-700"
+                                            : "bg-slate-100 text-slate-700"
+                                        }`}>{task.status}</span>
+                                      {task.owner ? <span>Owner: {task.owner}</span> : null}
+                                      {task.dueDate ? (
+                                        <span>
+                                          Due {format(new Date(task.dueDate), "MMM d, yyyy")}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                                  {task.phase ? (
-                                    <span className="rounded bg-slate-100 px-2 py-0.5 text-xs">
-                                      {task.phase}
-                                    </span>
-                                  ) : null}
-                                  {task.owner ? <span>Owner: {task.owner}</span> : null}
-                                  {task.dueDate ? (
-                                    <span>
-                                      Due {format(new Date(task.dueDate), "MMM d, yyyy")}
-                                    </span>
-                                  ) : null}
-                                  <span>
-                                    Planned {formatCurrency(task.budget)} / Actual {formatCurrency(task.actualBudget)}
+                                <div className="ml-4 flex items-center gap-2">
+                                  <span
+                                    className={`rounded-full px-2 py-1 text-xs font-medium ${task.priority === "High"
+                                      ? "bg-red-100 text-red-700"
+                                      : task.priority === "Medium"
+                                        ? "bg-yellow-100 text-yellow-700"
+                                        : "bg-gray-100 text-gray-700"
+                                      }`}
+                                  >
+                                    {task.priority}
                                   </span>
+                                  <span className="text-sm text-muted-foreground">
+                                    {task.completionPercent}%
+                                  </span>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setEditingTask(task)}
+                                    className="h-8 w-8 p-0"
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
                                 </div>
                               </div>
-                            </div>
-                            <div className="ml-4 flex items-center gap-2">
-                              <span
-                                className={`rounded-full px-2 py-1 text-xs font-medium ${
-                                  task.priority === "High"
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* ── Status grouping (default) ──────────────────────── */
+                <div className="space-y-6">
+                  {Object.entries(tasksByStatus).map(([status, statusTasks]) =>
+                    statusTasks.length > 0 ? (
+                      <div key={status}>
+                        <h4 className="mb-3 text-sm font-semibold text-muted-foreground">
+                          {status} ({statusTasks.length})
+                        </h4>
+                        <div className="space-y-2">
+                          {statusTasks.map((task) => (
+                            <div
+                              key={task.id}
+                              id={`task-row-${task.id}`}
+                              className={`flex cursor-pointer items-start justify-between rounded-lg border p-3 transition-colors hover:bg-slate-50 ${highlightedTaskId === task.id
+                                ? "ring-2 ring-blue-500 ring-offset-1 bg-blue-50/40"
+                                : ""
+                                }`}
+                              onClick={(e) => {
+                                if ((e.target as HTMLElement).closest('input[type="checkbox"], button')) return;
+                                setEditingTask(task);
+                              }}
+                            >
+                              <div className="flex flex-1 gap-3">
+                                <input
+                                  type="checkbox"
+                                  className="mt-1 h-4 w-4"
+                                  checked={selectedTaskIds.includes(task.id)}
+                                  onChange={() => toggleTaskSelection(task.id)}
+                                />
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-mono text-muted-foreground">
+                                      {task.taskId}
+                                    </span>
+                                    <p className="font-medium">{task.taskDescription}</p>
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                                    {task.phase ? (
+                                      <span className="rounded bg-slate-100 px-2 py-0.5 text-xs">
+                                        {task.phase}
+                                      </span>
+                                    ) : null}
+                                    {task.owner ? <span>Owner: {task.owner}</span> : null}
+                                    {task.dueDate ? (
+                                      <span>
+                                        Due {format(new Date(task.dueDate), "MMM d, yyyy")}
+                                      </span>
+                                    ) : null}
+                                    <span>
+                                      Planned {formatCurrency(task.budget)} / Actual {formatCurrency(task.actualBudget)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="ml-4 flex items-center gap-2">
+                                <span
+                                  className={`rounded-full px-2 py-1 text-xs font-medium ${task.priority === "High"
                                     ? "bg-red-100 text-red-700"
                                     : task.priority === "Medium"
-                                    ? "bg-yellow-100 text-yellow-700"
-                                    : "bg-gray-100 text-gray-700"
-                                }`}
-                              >
-                                {task.priority}
-                              </span>
-                              <span className="text-sm text-muted-foreground">
-                                {task.completionPercent}%
-                              </span>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => setEditingTask(task)}
-                                className="h-8 w-8 p-0"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
+                                      ? "bg-yellow-100 text-yellow-700"
+                                      : "bg-gray-100 text-gray-700"
+                                    }`}
+                                >
+                                  {task.priority}
+                                </span>
+                                <span className="text-sm text-muted-foreground">
+                                  {task.completionPercent}%
+                                </span>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setEditingTask(task)}
+                                  className="h-8 w-8 p-0"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ) : null
-                )}
-              </div>
+                    ) : null
+                  )}
+                </div>
+              )
             ) : (
               <div className="py-8 text-center text-muted-foreground">
                 <p>No tasks yet</p>
@@ -862,106 +913,21 @@ export default function ProjectDetail() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          <Card className="bg-white lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-4 w-4" />
-                Collaboration Comments
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-[220px_1fr_auto]">
-                <Select value={commentTaskScope} onValueChange={setCommentTaskScope}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="project">Project-wide</SelectItem>
-                    {(tasks || []).map((task) => (
-                      <SelectItem key={task.id} value={String(task.id)}>
-                        {task.taskId} - {task.taskDescription}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Textarea
-                  value={commentContent}
-                  onChange={(event) => setCommentContent(event.target.value)}
-                  placeholder="Add a comment. Use @handle to mention teammates."
-                  className="min-h-[84px]"
-                />
-                <Button
-                  type="button"
-                  className="h-fit"
-                  onClick={postComment}
-                  disabled={createComment.isPending}
-                >
-                  <Send className="mr-2 h-4 w-4" />
-                  {createComment.isPending ? "Posting..." : "Post"}
-                </Button>
-              </div>
-
-              {(comments as CollaborationComment[] | undefined)?.length ? (
-                <div className="space-y-3">
-                  {(comments as CollaborationComment[]).map((comment) => (
-                    <div key={comment.id} className="rounded border p-3">
-                      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <span className="font-medium text-slate-700">{comment.authorName}</span>
-                        <span>{format(new Date(comment.createdAt), "MMM d, yyyy h:mm a")}</span>
-                        <span className="rounded bg-slate-100 px-2 py-0.5 text-slate-700">
-                          {commentTaskLabel(comment.taskId)}
-                        </span>
-                        {comment.mentions.length > 0 ? (
-                          <span className="rounded bg-blue-50 px-2 py-0.5 text-blue-700">
-                            Mentions: {comment.mentions.map((mention) => `@${mention}`).join(", ")}
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="text-sm">{comment.content}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No comments yet. Add the first collaboration note for this project.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <History className="h-4 w-4" />
-                Activity Timeline
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {(activityFeed as CollaborationActivity[] | undefined)?.length ? (
-                <div className="space-y-3">
-                  {(activityFeed as CollaborationActivity[]).map((event) => (
-                    <div key={event.id} className="rounded border p-3">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <span
-                          className={`rounded px-2 py-0.5 text-xs font-medium ${eventColorMap[event.eventType]}`}
-                        >
-                          {event.eventType.replace(/_/g, " ")}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {format(new Date(event.createdAt), "MMM d, h:mm a")}
-                        </span>
-                      </div>
-                      <p className="text-sm">{event.summary}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No activity has been recorded yet.</p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        {/* Unified Activity Feed */}
+        <Card className="bg-white">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              Project Activity
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <UnifiedActivityFeed
+              projectId={projectId}
+              tasks={(tasks || []).map((t) => ({ id: t.id, taskId: t.taskId, taskDescription: t.taskDescription }))}
+            />
+          </CardContent>
+        </Card>
 
         <Card className="bg-white">
           <CardHeader>
@@ -981,170 +947,10 @@ export default function ProjectDetail() {
             </div>
           </CardHeader>
           <CardContent className="space-y-5">
-            {preferenceDraft ? (
-              <div className="space-y-4 rounded border p-4">
-                <p className="text-sm font-medium">Delivery Channels (Team Default)</p>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
-                    In-app
-                    <Switch
-                      checked={preferenceDraft.channels.inApp}
-                      onCheckedChange={(checked) =>
-                        setPreferenceDraft((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                channels: { ...prev.channels, inApp: checked },
-                              }
-                            : prev
-                        )
-                      }
-                    />
-                  </label>
-                  <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
-                    Email
-                    <Switch
-                      checked={preferenceDraft.channels.email}
-                      onCheckedChange={(checked) =>
-                        setPreferenceDraft((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                channels: { ...prev.channels, email: checked },
-                              }
-                            : prev
-                        )
-                      }
-                    />
-                  </label>
-                  <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
-                    Slack
-                    <Switch
-                      checked={preferenceDraft.channels.slack}
-                      onCheckedChange={(checked) =>
-                        setPreferenceDraft((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                channels: { ...prev.channels, slack: checked },
-                              }
-                            : prev
-                        )
-                      }
-                    />
-                  </label>
-                  <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
-                    Webhook
-                    <Switch
-                      checked={preferenceDraft.channels.webhook}
-                      onCheckedChange={(checked) =>
-                        setPreferenceDraft((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                channels: { ...prev.channels, webhook: checked },
-                              }
-                            : prev
-                        )
-                      }
-                    />
-                  </label>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="webhook-url">Webhook URL</Label>
-                  <Input
-                    id="webhook-url"
-                    placeholder="https://hooks.example.com/..."
-                    value={preferenceDraft.channels.webhookUrl}
-                    onChange={(event) =>
-                      setPreferenceDraft((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              channels: {
-                                ...prev.channels,
-                                webhookUrl: event.target.value,
-                              },
-                            }
-                          : prev
-                      )
-                    }
-                  />
-                </div>
-
-                <p className="text-sm font-medium">Event Types</p>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
-                    Overdue
-                    <Switch
-                      checked={preferenceDraft.events.overdue}
-                      onCheckedChange={(checked) =>
-                        setPreferenceDraft((prev) =>
-                          prev
-                            ? { ...prev, events: { ...prev.events, overdue: checked } }
-                            : prev
-                        )
-                      }
-                    />
-                  </label>
-                  <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
-                    Due Soon
-                    <Switch
-                      checked={preferenceDraft.events.dueSoon}
-                      onCheckedChange={(checked) =>
-                        setPreferenceDraft((prev) =>
-                          prev
-                            ? { ...prev, events: { ...prev.events, dueSoon: checked } }
-                            : prev
-                        )
-                      }
-                    />
-                  </label>
-                  <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
-                    Assignment Changes
-                    <Switch
-                      checked={preferenceDraft.events.assignmentChanged}
-                      onCheckedChange={(checked) =>
-                        setPreferenceDraft((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                events: { ...prev.events, assignmentChanged: checked },
-                              }
-                            : prev
-                        )
-                      }
-                    />
-                  </label>
-                  <label className="flex items-center justify-between gap-3 rounded border p-2 text-sm">
-                    Status Changes
-                    <Switch
-                      checked={preferenceDraft.events.statusChanged}
-                      onCheckedChange={(checked) =>
-                        setPreferenceDraft((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                events: { ...prev.events, statusChanged: checked },
-                              }
-                            : prev
-                        )
-                      }
-                    />
-                  </label>
-                </div>
-
-                <Button
-                  type="button"
-                  onClick={savePreferenceChanges}
-                  disabled={saveNotificationPreference.isPending}
-                >
-                  {saveNotificationPreference.isPending ? "Saving..." : "Save Preferences"}
-                </Button>
-              </div>
-            ) : null}
-
+            <p className="text-sm text-muted-foreground">
+              Notification delivery channels and event preferences are managed in{" "}
+              <Link href="/admin" className="font-medium text-blue-600 underline">Admin Settings → Notifications</Link>.
+            </p>
             <div>
               <p className="mb-2 text-sm font-medium">Recent Notification Events</p>
               {(notificationFeed as NotificationEventView[] | undefined)?.length ? (
@@ -1388,7 +1194,6 @@ export default function ProjectDetail() {
           onSuccess={async () => {
             await Promise.all([
               refetchTasks(),
-              refetchActivityFeed(),
               refetchNotificationFeed(),
             ]);
             setEditingTask(null);
@@ -1401,7 +1206,7 @@ export default function ProjectDetail() {
         open={showAddTask}
         onOpenChange={setShowAddTask}
         onSuccess={async () => {
-          await Promise.all([refetchTasks(), refetchActivityFeed()]);
+          await refetchTasks();
           setShowAddTask(false);
         }}
       />

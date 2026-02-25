@@ -65,6 +65,8 @@ const trpcClient = trpc.createClient({
   ],
 });
 
+import { BrandingProvider } from "@/lib/BrandingContext";
+
 if (typeof window !== "undefined") {
   loadAnalyticsScript();
 }
@@ -72,7 +74,9 @@ if (typeof window !== "undefined") {
 createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <BrandingProvider>
+        <App />
+      </BrandingProvider>
     </QueryClientProvider>
   </trpc.Provider>
 );

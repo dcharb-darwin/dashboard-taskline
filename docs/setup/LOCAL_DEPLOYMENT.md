@@ -1,11 +1,12 @@
 # Local Deployment
 
-This guide runs Dashboard Taskline directly on your machine (without app containerization).
+This guide runs Dashboard Taskline directly on your machine (without containerization).
 
 ## Prerequisites
 - Node.js 22+
 - pnpm 10+
-- MySQL 8+
+
+> SQLite is embedded via `better-sqlite3` — no external database server required.
 
 ## Setup
 
@@ -19,37 +20,25 @@ pnpm install
 cp .env.example .env
 ```
 
-3. Ensure your `DATABASE_URL` points to a reachable MySQL instance.
+3. (Optional) Adjust `DATABASE_URL` in `.env` — defaults to `file:./data/taskline.db`.
+   Without a `.env` file the app runs in **memory mode** (data resets on restart).
 
-Default local example:
-```env
-DATABASE_URL=mysql://rtc_user:rtc_password@localhost:3306/rtc_project_manager
-```
-
-4. Create database and user (example):
-```sql
-CREATE DATABASE rtc_project_manager;
-CREATE USER 'rtc_user'@'localhost' IDENTIFIED BY 'rtc_password';
-GRANT ALL PRIVILEGES ON rtc_project_manager.* TO 'rtc_user'@'localhost';
-FLUSH PRIVILEGES;
-```
-
-5. Apply schema:
+4. Apply schema (if using SQLite persistence):
 ```bash
 pnpm db:push
 ```
 
-6. (Optional) seed sample data:
+5. (Optional) seed sample data:
 ```bash
 pnpm db:seed
 ```
 
-7. Start development server:
+6. Start development server:
 ```bash
 pnpm dev
 ```
 
-8. Open:
+7. Open:
 - `http://localhost:3000`
 
 ## Development Commands
@@ -62,9 +51,8 @@ pnpm dev
 ## Troubleshooting
 
 Cannot connect to DB:
-- Verify MySQL is running.
-- Verify `DATABASE_URL` credentials and database name.
-- Check that database/user grants exist.
+- Ensure `DATABASE_URL` in `.env` is a valid SQLite file path (e.g. `file:./data/taskline.db`).
+- Check that the `data/` directory exists and is writable.
 
 Port 3000 in use:
 - Stop the existing process, or change app port configuration.

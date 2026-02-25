@@ -6,19 +6,22 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Link, useSearch } from "wouter";
 import { FolderKanban, Plus, Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 
 export default function Projects() {
   const { data: projects, isLoading } = trpc.projects.list.useQuery();
+  const { data: portfolio } = trpc.dashboard.portfolioSummary.useQuery();
   const search = useSearch();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [healthFilter, setHealthFilter] = useState<string | null>(null);
 
   useEffect(() => {
     const searchParams = new URLSearchParams(search);
     const statusParam = searchParams.get("status");
     const searchParam = searchParams.get("q");
+    const healthParam = searchParams.get("health");
 
     const allowedStatus = new Set(["all", "Planning", "Active", "On Hold", "Complete"]);
     if (statusParam && allowedStatus.has(statusParam)) {
@@ -27,13 +30,36 @@ export default function Projects() {
     if (searchParam !== null) {
       setSearchTerm(searchParam);
     }
+    if (healthParam && ["onTrack", "atRisk", "offTrack"].includes(healthParam)) {
+      setHealthFilter(healthParam);
+    } else {
+      setHealthFilter(null);
+    }
   }, [search]);
+
+  // Build set of project IDs matching the health filter
+  const healthFilterMap: Record<string, string> = {
+    onTrack: "On Track",
+    atRisk: "At Risk",
+    offTrack: "Off Track",
+  };
+
+  const healthProjectIds = useMemo(() => {
+    if (!healthFilter || !portfolio?.projectHealth) return null;
+    const targetHealth = healthFilterMap[healthFilter];
+    return new Set(
+      portfolio.projectHealth
+        .filter((p) => p.health === targetHealth)
+        .map((p) => p.projectId)
+    );
+  }, [healthFilter, portfolio]);
 
   const filteredProjects = projects?.filter((project) => {
     const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       project.templateType.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "all" || project.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesHealth = healthProjectIds === null || healthProjectIds.has(project.id);
+    return matchesSearch && matchesStatus && matchesHealth;
   });
 
   return (
@@ -43,7 +69,7 @@ export default function Projects() {
           <div>
             <h2 className="text-3xl font-bold tracking-tight">Projects</h2>
             <p className="mt-2 text-muted-foreground">
-              Manage all your RTC projects in one place
+              Manage all your projects in one place
             </p>
           </div>
           <Link href="/projects/new">
@@ -118,15 +144,14 @@ export default function Projects() {
                       <div className="flex items-start justify-between">
                         <h3 className="line-clamp-2 text-lg font-semibold">{project.name}</h3>
                         <span
-                          className={`ml-2 whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${
-                            project.status === "Active"
-                              ? "bg-green-100 text-green-700"
-                              : project.status === "Planning"
-                                ? "bg-blue-100 text-blue-700"
-                                : project.status === "On Hold"
-                                  ? "bg-yellow-100 text-yellow-700"
-                                  : "bg-gray-100 text-gray-700"
-                          }`}
+                          className={`ml-2 whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${project.status === "Active"
+                            ? "bg-green-100 text-green-700"
+                            : project.status === "Planning"
+                              ? "bg-blue-100 text-blue-700"
+                              : project.status === "On Hold"
+                                ? "bg-yellow-100 text-yellow-700"
+                                : "bg-gray-100 text-gray-700"
+                            }`}
                         >
                           {project.status}
                         </span>

@@ -1,50 +1,5 @@
 services:
-  # MySQL Database
-  db:
-    image: mysql:8.0
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: rtc_root_password
-      MYSQL_DATABASE: rtc_project_manager
-      MYSQL_USER: rtc_user
-      MYSQL_PASSWORD: rtc_password
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prtc_root_password"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: sh -lc "pnpm db:push"
-    restart: "no"
-    environment:
-      DATABASE_URL: mysql://rtc_user:rtc_password@db:3306/rtc_project_manager
-    depends_on:
-      db:
-        condition: service_healthy
-
-  seed:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: sh -lc "pnpm db:seed"
-    restart: "no"
-    profiles:
-      - seed
-    environment:
-      DATABASE_URL: mysql://rtc_user:rtc_password@db:3306/rtc_project_manager
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-
-  # Application
+  # Application (SQLite — no separate database service needed)
   app:
     build:
       context: .
@@ -54,21 +9,20 @@ services:
       - "${APP_PORT:-3000}:3000"
     environment:
       NODE_ENV: production
-      DATABASE_URL: mysql://rtc_user:rtc_password@db:3306/rtc_project_manager
+      DATABASE_URL: file:./data/taskline.db
       JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production}
       OAUTH_SERVER_URL: ${OAUTH_SERVER_URL:-https://api.manus.im}
       VITE_OAUTH_PORTAL_URL: ${VITE_OAUTH_PORTAL_URL:-https://auth.manus.im}
       VITE_APP_ID: ${VITE_APP_ID:-rtc-project-manager}
       OWNER_OPEN_ID: ${OWNER_OPEN_ID:-admin}
       OWNER_NAME: ${OWNER_NAME:-Administrator}
-    depends_on:
-      db:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
+      # Set to "true" to populate the database with sample templates,
+      # projects, and tasks on container start. Useful for demos or
+      # first-time setup. Idempotent — safe to leave enabled.
+      SEED_ON_START: ${SEED_ON_START:-false}
     volumes:
-      - ./drizzle:/app/drizzle
+      - app_data:/app/data
 
 volumes:
-  mysql_data:
+  app_data:
     driver: local

@@ -1,6 +1,6 @@
 {
   "version": "5",
-  "dialect": "mysql",
+  "dialect": "sqlite",
   "id": "99638298-5291-4255-a15e-635efd54586b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {

@@ -31,6 +31,8 @@ import {
   Pencil,
   Save,
   Trash2,
+  Download,
+  Upload,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -38,6 +40,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import DependencyPicker from "@/components/DependencyPicker";
 
 type EditableTemplateTask = {
   taskId: string;
@@ -105,6 +108,8 @@ export default function Templates() {
   const [taskDraft, setTaskDraft] = useState<EditableTemplateTask>(emptyTaskDraft(0));
 
   const updateTemplateTasks = trpc.templates.update.useMutation();
+  const exportTemplateMutation = trpc.templateTransfer.export.useMutation();
+  const importTemplateMutation = trpc.templateTransfer.import.useMutation();
 
   const templateIcons: Record<string, React.ElementType> = {
     marketing_campaign: Megaphone,
@@ -251,9 +256,9 @@ export default function Templates() {
     setSelectedTemplate((previous: any) =>
       previous
         ? {
-            ...previous,
-            sampleTasks: updatedSampleTasks,
-          }
+          ...previous,
+          sampleTasks: updatedSampleTasks,
+        }
         : previous
     );
 
@@ -261,14 +266,62 @@ export default function Templates() {
     toast.success("Template task library saved");
   };
 
+  const handleExport = async (templateId: number) => {
+    try {
+      const payload = await exportTemplateMutation.mutateAsync({ templateId });
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${payload.template.name.replace(/[^a-z0-9]/gi, "_")}_template.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("Template exported");
+    } catch (e: any) {
+      toast.error(e.message || "Export failed");
+    }
+  };
+
+  const handleImport = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const payload = JSON.parse(text);
+        if (payload.version !== 1 || !payload.template) {
+          toast.error("Invalid template file format");
+          return;
+        }
+        const result = await importTemplateMutation.mutateAsync({ payload });
+        await utils.templates.list.invalidate();
+        toast.success(`Imported: ${result.name}`);
+      } catch (e: any) {
+        toast.error(e.message || "Import failed");
+      }
+    };
+    input.click();
+  };
+
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Project Templates</h2>
-          <p className="mt-2 text-muted-foreground">
-            Browse, customize, and launch projects from standardized templates
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight">Project Templates</h2>
+            <p className="mt-2 text-muted-foreground">
+              Browse, customize, and launch projects from standardized templates
+            </p>
+          </div>
+          <Button variant="outline" onClick={handleImport} disabled={importTemplateMutation.isPending}>
+            <Upload className="mr-2 h-4 w-4" />
+            {importTemplateMutation.isPending ? "Importing..." : "Import Template"}
+          </Button>
         </div>
 
         {isLoading ? (
@@ -412,12 +465,22 @@ export default function Templates() {
 
             <div className="flex flex-wrap gap-3 pt-2">
               {selectedTemplate ? (
-                <Link href={`/projects/new?templateId=${selectedTemplate.id}`}>
-                  <Button className="flex-1">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Project from Template
+                <>
+                  <Link href={`/projects/new?templateId=${selectedTemplate.id}`}>
+                    <Button className="flex-1">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Project from Template
+                    </Button>
+                  </Link>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleExport(selectedTemplate.id)}
+                    disabled={exportTemplateMutation.isPending}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    {exportTemplateMutation.isPending ? "Exporting..." : "Export JSON"}
                   </Button>
-                </Link>
+                </>
               ) : null}
               <Button variant="outline" onClick={() => setSelectedTemplate(null)}>
                 Close
@@ -520,14 +583,15 @@ export default function Templates() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="dependency">Dependency</Label>
-                <Input
-                  id="dependency"
+                <Label>Dependencies</Label>
+                <DependencyPicker
+                  currentTaskId={taskDraft.taskId}
                   value={taskDraft.dependency}
-                  onChange={(event) =>
-                    setTaskDraft((previous) => ({ ...previous, dependency: event.target.value }))
-                  }
-                  placeholder="T001"
+                  onChange={(val) => setTaskDraft((previous) => ({ ...previous, dependency: val }))}
+                  templateTasks={draftTasks.map((t) => ({
+                    taskId: t.taskId,
+                    taskDescription: t.taskDescription,
+                  }))}
                 />
               </div>
             </div>

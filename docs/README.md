@@ -8,5 +8,5 @@
 
 ## Setup and Operations
 - `setup/QUICKSTART.md`: Fastest path to run the app locally or in Docker.
-- `setup/LOCAL_DEPLOYMENT.md`: Local machine setup with MySQL.
+- `setup/LOCAL_DEPLOYMENT.md`: Local machine setup with SQLite.
 - `setup/DOCKER_SETUP.md`: Docker Compose workflow and operations.

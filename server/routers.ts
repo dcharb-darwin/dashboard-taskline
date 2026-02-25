@@ -14,6 +14,7 @@ const templateTaskInputSchema = z
     taskDescription: z.string().optional(),
     description: z.string().optional(),
     phase: z.string().optional(),
+    milestone: z.string().optional(),
     priority: z.enum(["High", "Medium", "Low"]).optional(),
     owner: z.string().optional(),
     dependency: z.string().optional(),
@@ -69,12 +70,12 @@ const toTemplateInsert = (input: z.infer<typeof templateInputSchema>) => {
     name: input.name.trim(),
     templateKey,
     templateGroupKey,
-  version: input.version,
-  status: input.status ?? "Draft",
-  description: input.description?.trim() || undefined,
-  phases: JSON.stringify(input.phases.map((phase) => phase.trim()).filter(Boolean)),
-  sampleTasks: JSON.stringify(normalizeTemplateTasks(input.sampleTasks)),
-  uploadSource: input.uploadSource ?? "manual",
+    version: input.version,
+    status: input.status ?? "Draft",
+    description: input.description?.trim() || undefined,
+    phases: JSON.stringify(input.phases.map((phase) => phase.trim()).filter(Boolean)),
+    sampleTasks: JSON.stringify(normalizeTemplateTasks(input.sampleTasks)),
+    uploadSource: input.uploadSource ?? "manual",
   };
 };
 
@@ -162,9 +163,9 @@ const parseStringArray = (value: string | null | undefined) => {
 const parseDependencyCodes = (value: string | null | undefined) =>
   value
     ? value
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean)
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
     : [];
 
 const shiftDateByDays = (value: Date | null | undefined, days: number) => {
@@ -231,7 +232,7 @@ const emitGovernanceEvent = async (args: {
 };
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
+  // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
@@ -545,7 +546,7 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         const { createProject, createTask, getTemplateById } = await import("./db");
         const projectId = await createProject(input);
-        
+
         // If template is selected, auto-create tasks from template
         if (input.templateId) {
           const template = await getTemplateById(input.templateId);
@@ -581,8 +582,8 @@ export const appRouter = router({
                     typeof taskDef.phase === "string" ? taskDef.phase : null,
                   priority:
                     taskDef.priority === "High" ||
-                    taskDef.priority === "Medium" ||
-                    taskDef.priority === "Low"
+                      taskDef.priority === "Medium" ||
+                      taskDef.priority === "Low"
                       ? taskDef.priority
                       : "Medium",
                   status: "Not Started",
@@ -598,7 +599,7 @@ export const appRouter = router({
                       : null,
                   approvalRequired:
                     taskDef.approvalRequired === "Yes" ||
-                    taskDef.approvalRequired === "No"
+                      taskDef.approvalRequired === "No"
                       ? taskDef.approvalRequired
                       : "No",
                   deliverableType:
@@ -612,7 +613,7 @@ export const appRouter = router({
             }
           }
         }
-        
+
         await emitGovernanceEvent({
           ctx,
           entityType: "project",
@@ -705,6 +706,7 @@ export const appRouter = router({
             status: z.enum(["Not Started", "In Progress", "Complete", "On Hold"]).optional(),
             priority: z.enum(["High", "Medium", "Low"]).optional(),
             phase: z.string().optional(),
+            milestone: z.string().optional(),
             budget: z.number().int().min(0).optional(),
             actualBudget: z.number().int().min(0).optional(),
             approvalRequired: z.enum(["Yes", "No"]).optional(),
@@ -755,6 +757,7 @@ export const appRouter = router({
             status: z.enum(["Not Started", "In Progress", "Complete", "On Hold"]).optional(),
             priority: z.enum(["High", "Medium", "Low"]).optional(),
             phase: z.string().optional(),
+            milestone: z.string().optional(),
             budget: z.number().int().min(0).optional(),
             actualBudget: z.number().int().min(0).optional(),
             approvalRequired: z.enum(["Yes", "No"]).optional(),
@@ -818,6 +821,7 @@ export const appRouter = router({
               status: z.enum(["Not Started", "In Progress", "Complete", "On Hold"]).optional(),
               priority: z.enum(["High", "Medium", "Low"]).optional(),
               phase: z.string().optional(),
+              milestone: z.string().optional(),
               startDate: z.date().optional(),
               dueDate: z.date().optional(),
               completionPercent: z.number().min(0).max(100).optional(),
@@ -915,13 +919,13 @@ export const appRouter = router({
           let nextStartDate = clearDates
             ? null
             : input.patch.startDate !== undefined
-            ? input.patch.startDate
-            : task.startDate;
+              ? input.patch.startDate
+              : task.startDate;
           let nextDueDate = clearDates
             ? null
             : input.patch.dueDate !== undefined
-            ? input.patch.dueDate
-            : task.dueDate;
+              ? input.patch.dueDate
+              : task.dueDate;
 
           if (!clearDates && dateShiftDays !== 0) {
             nextStartDate = shiftDateByDays(nextStartDate, dateShiftDays);
@@ -1205,7 +1209,7 @@ export const appRouter = router({
   // Governance router
   governance: router({
     audit: router({
-      list: adminProcedure
+      list: publicProcedure
         .input(
           z
             .object({
@@ -1225,7 +1229,7 @@ export const appRouter = router({
         }),
     }),
     webhooks: router({
-      list: adminProcedure
+      list: publicProcedure
         .input(z.object({ includeInactive: z.boolean().optional() }).optional())
         .query(async ({ input }) => {
           const { listWebhookSubscriptions } = await import("./db");
@@ -1237,7 +1241,7 @@ export const appRouter = router({
             events: parseStringArray(item.events),
           }));
         }),
-      create: adminProcedure
+      create: publicProcedure
         .input(
           z.object({
             name: z.string().min(1),
@@ -1288,7 +1292,7 @@ export const appRouter = router({
             events: parseStringArray(created.events),
           };
         }),
-      update: adminProcedure
+      update: publicProcedure
         .input(
           z.object({
             id: z.number(),
@@ -1339,7 +1343,7 @@ export const appRouter = router({
             events: parseStringArray(updated.events),
           };
         }),
-      remove: adminProcedure
+      remove: publicProcedure
         .input(z.object({ id: z.number() }))
         .mutation(async ({ input, ctx }) => {
           const { deleteWebhookSubscription } = await import("./db");
@@ -1363,7 +1367,7 @@ export const appRouter = router({
           canAdminister: role === "Admin",
         };
       }),
-      listPolicies: adminProcedure.query(async () => {
+      listPolicies: publicProcedure.query(async () => {
         const { listUserAccessPolicies, listUsers } = await import("./db");
         const [policies, users] = await Promise.all([
           listUserAccessPolicies(500),
@@ -1374,7 +1378,7 @@ export const appRouter = router({
           users,
         };
       }),
-      setPolicy: adminProcedure
+      setPolicy: publicProcedure
         .input(
           z.object({
             openId: z.string().min(1),
@@ -1462,6 +1466,262 @@ export const appRouter = router({
           filename: `${project.name.replace(/[^a-z0-9]/gi, "_")}_Project_Plan.xlsx`,
           data: buffer.toString("base64"),
         };
+      }),
+  }),
+
+  // =========================================================================
+  // Project Risks
+  // =========================================================================
+  risks: router({
+    list: publicProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ input }) => {
+        const { listProjectRisks } = await import("./db");
+        return listProjectRisks(input.projectId);
+      }),
+
+    create: publicProcedure
+      .input(
+        z.object({
+          projectId: z.number(),
+          title: z.string().min(1),
+          description: z.string().optional(),
+          probability: z.number().int().min(1).max(5).optional(),
+          impact: z.number().int().min(1).max(5).optional(),
+          status: z.enum(["Open", "Mitigated", "Accepted", "Closed"]).optional(),
+          mitigationPlan: z.string().optional(),
+          owner: z.string().optional(),
+          linkedTaskId: z.number().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { createProjectRisk } = await import("./db");
+        return createProjectRisk(input);
+      }),
+
+    update: publicProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          title: z.string().min(1).optional(),
+          description: z.string().optional(),
+          probability: z.number().int().min(1).max(5).optional(),
+          impact: z.number().int().min(1).max(5).optional(),
+          status: z.enum(["Open", "Mitigated", "Accepted", "Closed"]).optional(),
+          mitigationPlan: z.string().optional(),
+          owner: z.string().optional(),
+          linkedTaskId: z.number().nullable().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        const { updateProjectRisk } = await import("./db");
+        return updateProjectRisk(id, data);
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const { deleteProjectRisk } = await import("./db");
+        await deleteProjectRisk(input.id);
+        return { success: true };
+      }),
+
+    topRisks: publicProcedure
+      .input(z.object({ limit: z.number().int().min(1).max(50).optional() }).optional())
+      .query(async ({ input }) => {
+        const { getTopRisks } = await import("./db");
+        return getTopRisks(input?.limit);
+      }),
+  }),
+
+  // =========================================================================
+  // Template Export / Import
+  // =========================================================================
+  templateTransfer: router({
+    export: publicProcedure
+      .input(z.object({ templateId: z.number() }))
+      .mutation(async ({ input }) => {
+        const { exportTemplate } = await import("./db");
+        const payload = await exportTemplate(input.templateId);
+        if (!payload) throw new Error("Template not found");
+        return payload;
+      }),
+
+    import: publicProcedure
+      .input(
+        z.object({
+          payload: z.object({
+            version: z.literal(1),
+            exportedAt: z.string(),
+            template: z.object({
+              name: z.string().min(1),
+              templateKey: z.string().min(1),
+              description: z.string().nullable(),
+              phases: z.array(z.string()),
+              sampleTasks: z.array(
+                z.object({
+                  taskId: z.string(),
+                  taskDescription: z.string(),
+                  phase: z.string(),
+                  priority: z.string(),
+                  owner: z.string().nullable(),
+                  dependency: z.string().nullable(),
+                  approvalRequired: z.string(),
+                })
+              ),
+            }),
+          }),
+          createAsDraft: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { importTemplate } = await import("./db");
+        return importTemplate(input.payload, {
+          createAsDraft: input.createAsDraft,
+        });
+      }),
+  }),
+
+  // =========================================================================
+  // Project Tags
+  // =========================================================================
+  tags: router({
+    list: publicProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ input }) => {
+        const { listProjectTags } = await import("./db");
+        return listProjectTags(input.projectId);
+      }),
+
+    listAll: publicProcedure.query(async () => {
+      const { getAllProjectTags } = await import("./db");
+      return getAllProjectTags();
+    }),
+
+    add: publicProcedure
+      .input(
+        z.object({
+          projectId: z.number(),
+          label: z.string().min(1).max(50),
+          color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { addProjectTag } = await import("./db");
+        return addProjectTag(input);
+      }),
+
+    remove: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const { removeProjectTag } = await import("./db");
+        await removeProjectTag(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // =========================================================================
+  // Saved Views
+  // =========================================================================
+  savedViews: router({
+    list: publicProcedure.query(async () => {
+      const { listSavedViews } = await import("./db");
+      return listSavedViews();
+    }),
+
+    create: publicProcedure
+      .input(
+        z.object({
+          name: z.string().min(1),
+          description: z.string().optional(),
+          filters: z.string(), // JSON string
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { createSavedView } = await import("./db");
+        return createSavedView(input);
+      }),
+
+    update: publicProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          name: z.string().min(1).optional(),
+          description: z.string().optional(),
+          filters: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        const { updateSavedView } = await import("./db");
+        return updateSavedView(id, data);
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const { deleteSavedView } = await import("./db");
+        await deleteSavedView(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // ── Notes Journal ───────────────────────────────────────────────────
+  taskNotes: router({
+    list: publicProcedure
+      .input(z.object({ taskId: z.number() }))
+      .query(async ({ input }) => {
+        const { listTaskNotes } = await import("./db");
+        return listTaskNotes(input.taskId);
+      }),
+
+    create: publicProcedure
+      .input(z.object({ taskId: z.number(), content: z.string().min(1), authorName: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        const { createTaskNote } = await import("./db");
+        return createTaskNote(input);
+      }),
+
+    listByProject: publicProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ input }) => {
+        const { listTaskNotesByProject } = await import("./db");
+        return listTaskNotesByProject(input.projectId);
+      }),
+  }),
+
+  projectNotes: router({
+    list: publicProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ input }) => {
+        const { listProjectNotes } = await import("./db");
+        return listProjectNotes(input.projectId);
+      }),
+
+    create: publicProcedure
+      .input(z.object({ projectId: z.number(), content: z.string().min(1), authorName: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        const { createProjectNote } = await import("./db");
+        return createProjectNote(input);
+      }),
+  }),
+
+  // Branding router
+  branding: router({
+    get: publicProcedure.query(async () => {
+      const { getBranding } = await import("./db");
+      return getBranding();
+    }),
+
+    update: publicProcedure
+      .input(z.object({
+        appName: z.string().min(1).max(100).optional(),
+        logoUrl: z.string().nullable().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { updateBranding } = await import("./db");
+        return updateBranding(input);
       }),
   }),
 });

@@ -8,7 +8,7 @@ export async function generateProjectExcel(project: Project, tasks: Task[]): Pro
   const workbook = new ExcelJS.Workbook();
 
   // Set workbook properties
-  workbook.creator = "RTC Project Manager";
+  workbook.creator = "Darwin TaskLine";
   workbook.created = new Date();
   workbook.modified = new Date();
 

@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import DependencyPicker from "@/components/DependencyPicker";
+import NotesJournal from "@/components/NotesJournal";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -257,12 +259,12 @@ export function EditTaskDialog({ task, open, onOpenChange, onSuccess }: EditTask
             {/* Dependency and Completion */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="dependency">Dependency</Label>
-                <Input
-                  id="dependency"
+                <Label>Dependencies</Label>
+                <DependencyPicker
+                  projectId={task.projectId}
+                  currentTaskId={task.taskId}
                   value={formData.dependency}
-                  onChange={(e) => setFormData({ ...formData, dependency: e.target.value })}
-                  placeholder="T001, T002"
+                  onChange={(val) => setFormData({ ...formData, dependency: val })}
                 />
               </div>
 
@@ -334,16 +336,10 @@ export function EditTaskDialog({ task, open, onOpenChange, onSuccess }: EditTask
               </div>
             </div>
 
-            {/* Notes */}
+            {/* Notes Journal */}
             <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea
-                id="notes"
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                rows={4}
-                placeholder="Add any additional notes or comments..."
-              />
+              <Label>Notes</Label>
+              <NotesJournal type="task" entityId={task.id} />
             </div>
           </div>
 

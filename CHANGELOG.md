@@ -1,11 +1,38 @@
 # Changelog
 
-All notable changes to the RTC Project Manager will be documented in this file.
+All notable changes to the Darwin TaskLine will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [2.0.0] - 2026-02-24 (gen2)
+
+### Added
+- White-label branding system (custom app name and logo via Admin → Branding)
+- `BrandingContext` for live propagation of branding across entire UI
+- Cross-project Tasks page with grouping (status/phase/project/priority/owner) and sorting
+- Calendar Projects/Tasks toggle with phase color-coded task events
+- Gantt Chart phase drill-down with `?phase=` URL navigation
+- Project Detail phase grouping toggle with collapsible sections
+- Admin Settings with Governance, Notifications, and Branding tabs
+- Command Palette (`Cmd+K` / `Ctrl+K`) for quick navigation
+- Clickable task rows in Project Detail (opens edit dialog)
+- Task dependency picker and validation
+- Project risks, notes/journal, tags, and activity feed components
+- Unified activity feed and task slide-out panel
+
+### Changed
+- Renamed application from "RTC Project Manager" to "Darwin TaskLine"
+- Renamed package from `rtc-project-manager` to `darwin-taskline`
+- Dashboard subtitle updated to be brand-neutral
+- Excel export creator updated to "Darwin TaskLine"
+
+### Improved
+- Project template schema now supports milestones
+- Phase-aware sorting in task views
+- Gantt drilldown map includes phase context
 
 ### Planned
 - Bulk task operations
@@ -70,13 +97,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2026-01-14
 
 ### Added
-- Initial release of RTC Project Manager
+- Initial release of Darwin TaskLine
 - Project CRUD operations
 - Task management with dependencies
 - Dashboard with statistics and visualizations
 - Template library with 14 project types
 - User authentication via Manus OAuth
-- MySQL database integration
+- SQLite database integration (via better-sqlite3 + Drizzle ORM)
 - tRPC API with full type safety
 
 ---

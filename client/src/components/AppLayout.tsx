@@ -1,8 +1,10 @@
 import { cn } from "@/lib/utils";
+import { useBranding } from "@/lib/BrandingContext";
 import { FolderKanban, Plus } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "./ui/button";
+import CommandPalette from "./CommandPalette";
 
 type AppLayoutProps = {
   children: ReactNode;
@@ -14,8 +16,10 @@ const navItems = [
   { label: "Dashboard", path: "/" },
   { label: "Projects", path: "/projects" },
   { label: "Templates", path: "/templates" },
+  { label: "Tasks", path: "/tasks" },
   { label: "Calendar", path: "/calendar" },
   { label: "Gantt", path: "/gantt" },
+  { label: "Admin", path: "/admin" },
 ];
 
 const isActiveRoute = (location: string, path: string) => {
@@ -29,6 +33,7 @@ export function AppLayout({
   showNewProjectButton = true,
 }: AppLayoutProps) {
   const [location] = useLocation();
+  const { appName, logoUrl } = useBranding();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -37,8 +42,12 @@ export function AppLayout({
           <div className="flex flex-col gap-3 md:h-16 md:flex-row md:items-center md:justify-between">
             <Link href="/">
               <span className="inline-flex items-center gap-2 text-left">
-                <FolderKanban className="h-6 w-6 text-blue-600" />
-                <span className="text-xl font-bold">RTC Project Manager</span>
+                {logoUrl ? (
+                  <img src={logoUrl} alt="" className="h-7 w-7 rounded object-contain" />
+                ) : (
+                  <FolderKanban className="h-6 w-6 text-blue-600" />
+                )}
+                <span className="text-xl font-bold">{appName}</span>
               </span>
             </Link>
 
@@ -68,6 +77,7 @@ export function AppLayout({
       </header>
 
       <main className={cn("container py-8", contentClassName)}>{children}</main>
+      <CommandPalette />
     </div>
   );
 }

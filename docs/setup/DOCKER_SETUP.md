@@ -13,10 +13,9 @@ docker compose version
 ```
 
 ## Services
-- `db`: MySQL 8 database with persistent volume
+- `app`: production-mode web app with embedded SQLite on port `3000`
 - `migrate`: one-shot schema migration (`pnpm db:push`)
 - `seed`: one-shot sample data loader (`pnpm db:seed`, profile `seed`)
-- `app`: production-mode web app on port `3000`
 
 ## First Run
 
@@ -27,7 +26,7 @@ cp .env.example .env
 
 2. Build and start core services:
 ```bash
-docker compose up -d --build db migrate app
+docker compose up -d --build migrate app
 ```
 
 3. (Optional) seed sample data:
@@ -48,7 +47,6 @@ docker compose ps
 View logs:
 ```bash
 docker compose logs -f app
-docker compose logs -f db
 ```
 
 Restart services:
@@ -61,7 +59,7 @@ Stop all services:
 docker compose down
 ```
 
-Stop and remove DB volume:
+Stop and remove data volume:
 ```bash
 docker compose down -v
 ```
@@ -78,22 +76,22 @@ Re-run seed manually:
 docker compose --profile seed run --rm seed
 ```
 
-Open MySQL shell:
+Open SQLite shell:
 ```bash
-docker compose exec db mysql -u rtc_user -prtc_password rtc_project_manager
+docker compose exec app sqlite3 /app/data/taskline.db
 ```
 
 ## Troubleshooting
 
-Database not healthy:
+App cannot start:
 ```bash
 docker compose ps
-docker compose logs db
+docker compose logs app
 ```
 
-App cannot connect to DB:
-- Confirm `db` is healthy before `app` starts.
-- Confirm `DATABASE_URL` values in `docker-compose.yml` match intended credentials.
+Database path issues:
+- Confirm `DATABASE_URL` in `.env` points to a valid SQLite file path.
+- Ensure the data directory is mounted as a Docker volume for persistence.
 
 Port conflict on `3000`:
 - Change `APP_PORT` in `.env`.

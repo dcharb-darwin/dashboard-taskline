@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react";
-import { Gantt, ViewMode } from "gantt-task-react";
+import { useCallback, useMemo, useState } from "react";
+import { Gantt, Task as GanttTask, ViewMode } from "gantt-task-react";
 import { trpc } from "@/lib/trpc";
 import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { AlertTriangle, ChevronsDownUp, ChevronsUpDown, Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLocation } from "wouter";
 import { buildGanttTimeline } from "@/lib/gantt";
@@ -14,7 +14,7 @@ export default function GanttChart() {
   const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.Month);
   const [selectedProject, setSelectedProject] = useState<string>("all");
   const [, setLocation] = useLocation();
-  
+
   const { data: projects, isLoading: projectsLoading } = trpc.projects.list.useQuery();
   const { data: allTasks, isLoading: tasksLoading } = trpc.tasks.listAll.useQuery();
   const parsedSelectedProjectId =
@@ -42,6 +42,53 @@ export default function GanttChart() {
       }),
     [projects, allTasks, selectedProject, criticalTaskIds],
   );
+
+  // ── Managed task list for collapse/expand ──────────────────────────
+  const [ganttTasks, setGanttTasks] = useState<GanttTask[]>([]);
+
+  // Sync timeline.tasks → ganttTasks (preserving existing hideChildren state)
+  useMemo(() => {
+    setGanttTasks((prev) => {
+      const hiddenMap = new Map(
+        prev
+          .filter((t) => t.type === "project" && t.hideChildren !== undefined)
+          .map((t) => [t.id, t.hideChildren]),
+      );
+      return timeline.tasks.map((t) => ({
+        ...t,
+        hideChildren:
+          t.type === "project"
+            ? hiddenMap.has(t.id)
+              ? hiddenMap.get(t.id)
+              : t.hideChildren // keep default from buildGanttTimeline
+            : undefined,
+      }));
+    });
+  }, [timeline.tasks]);
+
+  const handleExpanderClick = useCallback((task: GanttTask) => {
+    setGanttTasks((prev) =>
+      prev.map((t) =>
+        t.id === task.id ? { ...t, hideChildren: !t.hideChildren } : t
+      )
+    );
+  }, []);
+
+  const expandAll = useCallback(() => {
+    setGanttTasks((prev) =>
+      prev.map((t) =>
+        t.type === "project" ? { ...t, hideChildren: false } : t
+      )
+    );
+  }, []);
+
+  const collapseAll = useCallback(() => {
+    setGanttTasks((prev) =>
+      prev.map((t) =>
+        t.type === "project" ? { ...t, hideChildren: true } : t
+      )
+    );
+  }, []);
 
   if (projectsLoading || tasksLoading) {
     return (
@@ -79,6 +126,25 @@ export default function GanttChart() {
                   ))}
                 </SelectContent>
               </Select>
+
+              <div className="flex gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={expandAll}
+                  title="Expand All"
+                >
+                  <ChevronsUpDown className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={collapseAll}
+                  title="Collapse All"
+                >
+                  <ChevronsDownUp className="h-4 w-4" />
+                </Button>
+              </div>
 
               <div className="flex gap-1">
                 <Button
@@ -121,18 +187,25 @@ export default function GanttChart() {
           ) : null}
         </CardHeader>
         <CardContent>
-          {timeline.tasks.length > 0 ? (
+          {ganttTasks.length > 0 ? (
             <div className="overflow-x-auto">
               <Gantt
-                tasks={timeline.tasks}
+                tasks={ganttTasks}
                 viewMode={viewMode}
+                viewDate={timeline.viewDate}
+                preStepsCount={1}
                 listCellWidth="200px"
                 columnWidth={viewMode === ViewMode.Month ? 60 : viewMode === ViewMode.Week ? 100 : 50}
+                onExpanderClick={handleExpanderClick}
                 onSelect={(selectedTask) => {
                   const match = timeline.drilldownMap.get(String(selectedTask.id));
                   if (!match) return;
                   if (match.taskId) {
                     setLocation(`/projects/${match.projectId}?task=${match.taskId}`);
+                    return;
+                  }
+                  if (match.phaseName) {
+                    setLocation(`/projects/${match.projectId}?phase=${encodeURIComponent(match.phaseName)}`);
                     return;
                   }
                   setLocation(`/projects/${match.projectId}`);

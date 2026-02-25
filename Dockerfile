@@ -1,4 +1,4 @@
-# Multi-stage build for RTC Project Manager
+# Multi-stage build for Darwin TaskLine
 FROM node:22-alpine AS builder
 
 # Install pnpm
@@ -42,11 +42,18 @@ COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=builder /app/seed-database.mjs ./seed-database.mjs
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
+
 # Expose port
 EXPOSE 3000
 
 # Set environment to production
 ENV NODE_ENV=production
 
-# Start the application
-CMD ["node", "dist/index.js"]
+# Seed toggle — set to "true" to seed with sample data on container start
+ENV SEED_ON_START=false
+
+# Start via entrypoint (conditionally seeds, then starts app)
+ENTRYPOINT ["./docker-entrypoint.sh"]

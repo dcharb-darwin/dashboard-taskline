@@ -11,6 +11,8 @@ import CreateProject from "./pages/CreateProject";
 import Templates from "./pages/Templates";
 import Calendar from "./pages/Calendar";
 import GanttChart from "./pages/GanttChart";
+import AdminSettings from "./pages/AdminSettings";
+import Tasks from "./pages/Tasks";
 
 function Router() {
   return (
@@ -21,7 +23,9 @@ function Router() {
       <Route path="/projects/:id" component={ProjectDetail} />
       <Route path="/templates" component={Templates} />
       <Route path="/calendar" component={Calendar} />
+      <Route path="/tasks" component={Tasks} />
       <Route path="/gantt" component={GanttChart} />
+      <Route path="/admin" component={AdminSettings} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>
@@ -38,7 +42,7 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider
         defaultTheme="light"
-        // switchable
+      // switchable
       >
         <TooltipProvider>
           <Toaster />

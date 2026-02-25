@@ -1,4 +1,5 @@
 import type { Task as GanttTask } from "gantt-task-react";
+import { groupByPhase, getPhaseColor } from "./phase-utils";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -19,12 +20,14 @@ type TaskSummary = {
   durationDays: number | null;
   dependency: string | null;
   completionPercent: number;
+  phase: string | null;
 };
 
 export type GanttBuildResult = {
   tasks: GanttTask[];
-  drilldownMap: Map<string, { projectId: number; taskId?: number }>;
+  drilldownMap: Map<string, { projectId: number; taskId?: number; phaseName?: string }>;
   inferredTaskCount: number;
+  viewDate: Date;
 };
 
 type BuildInput = {
@@ -76,7 +79,7 @@ export function buildGanttTimeline({
   criticalTaskIds,
 }: BuildInput): GanttBuildResult {
   const timeline: GanttTask[] = [];
-  const drilldownMap = new Map<string, { projectId: number; taskId?: number }>();
+  const drilldownMap = new Map<string, { projectId: number; taskId?: number; phaseName?: string }>();
   let inferredTaskCount = 0;
 
   const projectScope =
@@ -108,7 +111,10 @@ export function buildGanttTimeline({
         : new Date());
 
     let rollingStart = new Date(projectStartFallback.getTime());
-    const childRows: GanttTask[] = [];
+
+    // ── Build child task rows (resolving dates, dependencies) ──────────
+    type ResolvedChild = GanttTask & { _phase: string };
+    const childRows: ResolvedChild[] = [];
 
     for (const task of projectTasks) {
       const explicitStart = asDate(task.startDate);
@@ -154,31 +160,42 @@ export function buildGanttTimeline({
         end,
         progress: task.completionPercent || 0,
         type: "task",
-        project: projectRowId,
+        project: projectRowId, // will be updated per-phase below
         dependencies: dependencyIds.length > 0 ? dependencyIds : undefined,
         styles:
           criticalTaskIds && criticalTaskIds.has(task.id)
             ? {
-                backgroundColor: "#dc2626",
-                backgroundSelectedColor: "#b91c1c",
-                progressColor: "#fca5a5",
-                progressSelectedColor: "#f87171",
-              }
+              backgroundColor: "#dc2626",
+              backgroundSelectedColor: "#b91c1c",
+              progressColor: "#fca5a5",
+              progressSelectedColor: "#f87171",
+            }
             : undefined,
-      });
+        _phase: task.phase?.trim() || "Uncategorized",
+      } as ResolvedChild);
 
       drilldownMap.set(taskRowId, { projectId: project.id, taskId: task.id });
     }
 
-    const childStarts = childRows.map((task) => task.start.getTime());
-    const childEnds = childRows.map((task) => task.end.getTime());
+    // ── Group by phase → insert phase rows between project and tasks ──
+    const phaseGroups = groupByPhase(
+      childRows,
+      (row) => row._phase,
+      (row) => row.progress || 0,
+      (row) => row.start,
+      (row) => row.end,
+    );
+
+    // Compute project-level dates from all children
+    const allChildStarts = childRows.map((t) => t.start.getTime());
+    const allChildEnds = childRows.map((t) => t.end.getTime());
     const projectStartInput =
-      childStarts.length > 0
-        ? new Date(Math.min(...childStarts))
+      allChildStarts.length > 0
+        ? new Date(Math.min(...allChildStarts))
         : asDate(project.startDate);
     const projectEndInput =
-      childEnds.length > 0
-        ? new Date(Math.max(...childEnds))
+      allChildEnds.length > 0
+        ? new Date(Math.max(...allChildEnds))
         : asDate(project.targetCompletionDate);
     const { start: projectStart, end: projectEnd } = normalizeRange(
       projectStartInput,
@@ -189,10 +206,11 @@ export function buildGanttTimeline({
     const projectProgress =
       childRows.length > 0
         ? Math.round(
-            childRows.reduce((total, task) => total + (task.progress || 0), 0) / childRows.length,
-          )
+          childRows.reduce((total, task) => total + (task.progress || 0), 0) / childRows.length,
+        )
         : 0;
 
+    // ── Project row ─────────────────────────────────────────────────────
     timeline.push({
       id: projectRowId,
       name: project.name,
@@ -200,11 +218,55 @@ export function buildGanttTimeline({
       end: projectEnd,
       progress: projectProgress,
       type: "project",
-      hideChildren: false,
+      hideChildren: true, // start collapsed
     });
     drilldownMap.set(projectRowId, { projectId: project.id });
-    timeline.push(...childRows);
+
+    // ── Phase rows + task rows ──────────────────────────────────────────
+    for (let i = 0; i < phaseGroups.length; i++) {
+      const phase = phaseGroups[i]!;
+      const phaseRowId = `phase-${project.id}-${i}`;
+      const colors = getPhaseColor(i);
+
+      const phaseStart = phase.startDate ?? projectStart;
+      const phaseEnd = phase.endDate ?? addDays(phaseStart, 1);
+
+      timeline.push({
+        id: phaseRowId,
+        name: `  ${phase.name}`,
+        start: phaseStart,
+        end: phaseEnd.getTime() > phaseStart.getTime() ? phaseEnd : addDays(phaseStart, 1),
+        progress: phase.progress,
+        type: "project",
+        project: projectRowId,
+        hideChildren: true, // phases also start collapsed
+        styles: {
+          backgroundColor: colors.bar,
+          backgroundSelectedColor: colors.barSelected,
+          progressColor: colors.bg,
+          progressSelectedColor: colors.bg,
+        },
+      });
+      drilldownMap.set(phaseRowId, { projectId: project.id, phaseName: phase.name });
+
+      // Re-parent task rows to this phase
+      for (const taskRow of phase.tasks) {
+        timeline.push({
+          ...taskRow,
+          project: phaseRowId,
+        });
+      }
+    }
   }
 
-  return { tasks: timeline, drilldownMap, inferredTaskCount };
+  // Use a date shortly before "now" as the initial viewport, so today's tasks
+  // are visible without scrolling. Fall back to earliest task if no tasks exist.
+  const allStarts = timeline.map((t) => t.start.getTime());
+  const now = new Date();
+  const twoWeeksAgo = new Date(now.getTime() - 14 * ONE_DAY_MS);
+  const viewDate = allStarts.length > 0
+    ? twoWeeksAgo
+    : now;
+
+  return { tasks: timeline, drilldownMap, inferredTaskCount, viewDate };
 }

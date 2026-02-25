@@ -1,16 +1,34 @@
-# Dashboard Taskline
+# Darwin TaskLine
 
-Dashboard Taskline is a full-stack project and task management application for template-based delivery tracking, calendar and Gantt visualization, and portfolio reporting.
+A full-stack project and task management platform for template-based delivery tracking, calendar and Gantt visualization, and portfolio reporting.
 
-## What This Repository Contains
-- React + TypeScript frontend (`client/`)
-- Express + tRPC backend (`server/`)
-- Drizzle schema and migrations (`drizzle/`)
-- Shared types/constants (`shared/`)
+## Features
+
+- **Project Management** — Create, track, and manage projects with phases, milestones, and budgets
+- **Task Board** — Cross-project task view with filtering, grouping (phase/project/priority/owner), and sorting
+- **Template System** — Reusable project templates with task definitions and phase structures
+- **Gantt Chart** — Interactive timeline with collapsible project/phase hierarchy and drill-down navigation
+- **Calendar** — Projects/Tasks toggle view with phase color-coded task events
+- **Dashboard** — Portfolio health, risk tracking, upcoming deadlines, and governance overview
+- **Admin Settings** — Governance & access policies, notification preferences, and white-label branding
+- **White-Label Branding** — Customizable app name and logo via Admin settings
+- **Command Palette** — Quick navigation with `Cmd+K` / `Ctrl+K`
+- **Excel Export** — Download project and task data as formatted spreadsheets
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 19, TypeScript, Vite |
+| UI | Radix UI, shadcn/ui, Recharts |
+| Backend | Express, tRPC, SuperJSON |
+| Database | SQLite via Drizzle ORM |
+| Gantt | gantt-task-react |
+| Calendar | react-big-calendar |
 
 ## Quick Start
 
-### Docker (recommended for fastest start)
+### Docker (recommended)
 ```bash
 cp .env.example .env
 docker compose up -d --build db migrate app
@@ -19,7 +37,7 @@ docker compose --profile seed up -d --build seed
 open http://localhost:3000
 ```
 
-### Local development
+### Local Development
 ```bash
 pnpm install
 cp .env.example .env
@@ -28,33 +46,47 @@ pnpm db:seed   # optional
 pnpm dev
 ```
 
-See detailed guides:
-- `docs/setup/QUICKSTART.md`
-- `docs/setup/DOCKER_SETUP.md`
-- `docs/setup/LOCAL_DEPLOYMENT.md`
+See detailed guides in [`docs/setup/`](docs/setup/).
 
 ## Development Commands
-- `pnpm dev`: run local dev server
-- `pnpm check`: TypeScript type check
-- `pnpm test`: run test suite
-- `pnpm build`: build frontend and backend bundles
-- `npm run verify`: run check + test + build gate
 
-## Branching and Release Flow
-- `dev`: integration branch
-- `staging`: release validation
-- `main`: production-ready
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Start dev server with hot reload |
+| `pnpm check` | TypeScript type check |
+| `pnpm test` | Run test suite (vitest) |
+| `pnpm build` | Production build (frontend + backend) |
+| `npm run verify` | Full gate: check + test + build |
 
-Use short-lived feature branches from `dev` with `codex/` prefix.
+## Project Structure
+
+```
+├── client/          # React frontend
+│   ├── src/
+│   │   ├── components/  # UI components
+│   │   ├── lib/         # Utilities, context, tRPC client
+│   │   └── pages/       # Route pages
+│   └── index.html
+├── server/          # Express + tRPC backend
+├── drizzle/         # Database schema and migrations
+├── shared/          # Shared types and constants
+└── docs/            # Documentation
+```
+
+## Branching
+
+| Branch | Purpose |
+|--------|---------|
+| `main` | Production-ready |
+| `gen2` | Current development |
+| `staging` | Release validation |
 
 ## Documentation
-- [docs/README.md](docs/README.md)
-- [docs/PRD-HANDOFF.md](docs/PRD-HANDOFF.md)
-- [docs/REPO_CLEANUP_2026-02-24.md](docs/REPO_CLEANUP_2026-02-24.md)
-- [CONTRIBUTING.md](CONTRIBUTING.md)
 
-## Validation Standard
-Before merge, all of the following must pass:
-```bash
-npm run verify
-```
+- [Setup Guides](docs/setup/)
+- [PRD Handoff](docs/PRD-HANDOFF.md)
+- [Contributing](CONTRIBUTING.md)
+
+## License
+
+MIT

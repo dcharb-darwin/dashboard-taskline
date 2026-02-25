@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import DependencyPicker from "@/components/DependencyPicker";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -226,12 +227,11 @@ export function AddTaskDialog({ projectId, open, onOpenChange, onSuccess }: AddT
             {/* Dependency and Budget */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="dependency">Dependency</Label>
-                <Input
-                  id="dependency"
+                <Label>Dependencies</Label>
+                <DependencyPicker
+                  projectId={projectId}
                   value={formData.dependency}
-                  onChange={(e) => setFormData({ ...formData, dependency: e.target.value })}
-                  placeholder="T001, T002"
+                  onChange={(val) => setFormData({ ...formData, dependency: val })}
                 />
               </div>
 

@@ -106,3 +106,20 @@ temp/
 *.db
 *.sqlite
 *.sqlite3
+
+# Archives and downloads (keep locally, don't push)
+*.zip
+
+# Template spreadsheets (local reference data)
+spreadsheets/
+
+# Dev screenshots at repo root
+/*.png
+/*.jpg
+
+# npm lock file (project uses pnpm)
+package-lock.json
+
+# Local data directory
+data/
+!data/.gitkeep
