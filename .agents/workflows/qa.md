@@ -14,7 +14,7 @@ npm run dev
 The app will be available at **http://localhost:3000**.
 
 ### Browser QA
-2. Open the browser to http://localhost:3000 and verify the following per phase:
+2. Use the `browser_subagent` tool to open http://localhost:3000 and verify the following per phase. The browser_subagent is the standard tool for all browser QA, screenshots, and visual verification — do NOT dispatch to other agents for this.
 
 **Phase 0 (SQLite Migration)**
 - App loads without errors
@@ -43,6 +43,15 @@ The app will be available at **http://localhost:3000**.
 - Verify existing status workflow (Planning → Active → Complete) unchanged
 - Projects page status filter includes `Closeout`
 - Calendar and Gantt views render `Closeout` projects normally
+
+**Phase 5 (MVP/Vision Toggle)**
+- MVP/Vision pill toggle visible in nav bar, default is MVP
+- MVP mode: nav hides Tasks and Admin links
+- MVP mode: Dashboard hides Portfolio Health and Top Risks cards
+- MVP mode: Project detail hides Risk Register, Activity Feed, Notifications, Tags, Export
+- MVP mode: `/tasks` and `/admin` routes redirect to `/`
+- Vision mode: all hidden elements become visible
+- Toggle persists across page refresh (localStorage)
 
 ### Stop Dev Server
 3. When done, stop the server with Ctrl+C or by terminating the command.
