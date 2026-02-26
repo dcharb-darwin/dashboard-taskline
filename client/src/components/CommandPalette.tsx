@@ -1,6 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
+import { useViewMode } from "@/contexts/ViewModeContext";
 import {
     Command,
     Search,
@@ -40,6 +41,7 @@ export default function CommandPalette() {
     const [query, setQuery] = useState("");
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [, setLocation] = useLocation();
+    const { isMvp } = useViewMode();
 
     const { data: projects } = trpc.projects.list.useQuery(undefined, { enabled: open });
     const { data: tasks } = trpc.tasks.listAll.useQuery(undefined, { enabled: open });
@@ -89,8 +91,11 @@ export default function CommandPalette() {
             });
         });
 
-        // Nav items
-        items.push(...NAV_ITEMS);
+        // Nav items (filter by view mode)
+        const filteredNavItems = isMvp
+            ? NAV_ITEMS.filter((item) => item.path !== "/tasks" && item.path !== "/admin")
+            : NAV_ITEMS;
+        items.push(...filteredNavItems);
 
         if (!q) return items.slice(0, 12);
 
@@ -101,7 +106,7 @@ export default function CommandPalette() {
                     (item.subtitle && item.subtitle.toLowerCase().includes(q))
             )
             .slice(0, 12);
-    }, [projects, tasks, query]);
+    }, [projects, tasks, query, isMvp]);
 
     useEffect(() => {
         setSelectedIndex(0);

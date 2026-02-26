@@ -5,6 +5,7 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { EnumProvider } from "./contexts/EnumContext";
+import { ViewModeProvider, useViewMode } from "./contexts/ViewModeContext";
 import Dashboard from "./pages/Dashboard";
 import Projects from "./pages/Projects";
 import ProjectDetail from "./pages/ProjectDetail";
@@ -16,6 +17,7 @@ import AdminSettings from "./pages/AdminSettings";
 import Tasks from "./pages/Tasks";
 
 function Router() {
+  const { isMvp } = useViewMode();
   return (
     <Switch>
       <Route path={"/"} component={Dashboard} />
@@ -24,9 +26,9 @@ function Router() {
       <Route path="/projects/:id" component={ProjectDetail} />
       <Route path="/templates" component={Templates} />
       <Route path="/calendar" component={Calendar} />
-      <Route path="/tasks" component={Tasks} />
+      {!isMvp && <Route path="/tasks" component={Tasks} />}
       <Route path="/gantt" component={GanttChart} />
-      <Route path="/admin" component={AdminSettings} />
+      {!isMvp && <Route path="/admin" component={AdminSettings} />}
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>
@@ -41,17 +43,19 @@ function Router() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-      // switchable
-      >
-        <EnumProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Router />
-          </TooltipProvider>
-        </EnumProvider>
-      </ThemeProvider>
+      <ViewModeProvider>
+        <ThemeProvider
+          defaultTheme="light"
+        // switchable
+        >
+          <EnumProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Router />
+            </TooltipProvider>
+          </EnumProvider>
+        </ThemeProvider>
+      </ViewModeProvider>
     </ErrorBoundary>
   );
 }

@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { useBranding } from "@/lib/BrandingContext";
+import { useViewMode } from "@/contexts/ViewModeContext";
 import { FolderKanban, Plus } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
@@ -34,6 +35,11 @@ export function AppLayout({
 }: AppLayoutProps) {
   const [location] = useLocation();
   const { appName, logoUrl } = useBranding();
+  const { viewMode, setViewMode, isMvp } = useViewMode();
+
+  const visibleNavItems = isMvp
+    ? navItems.filter((item) => item.label !== "Tasks" && item.label !== "Admin")
+    : navItems;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -53,7 +59,7 @@ export function AppLayout({
 
             <div className="flex items-center justify-between gap-3">
               <nav className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
-                {navItems.map((item) => {
+                {visibleNavItems.map((item) => {
                   const active = isActiveRoute(location, item.path);
                   return (
                     <Button asChild key={item.path} size="sm" variant={active ? "secondary" : "ghost"}>
@@ -62,6 +68,33 @@ export function AppLayout({
                   );
                 })}
               </nav>
+
+              <div className="inline-flex overflow-hidden rounded-full border border-gray-200">
+                <button
+                  type="button"
+                  className={cn(
+                    "px-3 py-1 text-xs font-medium transition-colors",
+                    viewMode === "mvp"
+                      ? "bg-blue-600 text-white"
+                      : "bg-transparent text-gray-600 hover:bg-gray-100"
+                  )}
+                  onClick={() => setViewMode("mvp")}
+                >
+                  MVP
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    "px-3 py-1 text-xs font-medium transition-colors",
+                    viewMode === "vision"
+                      ? "bg-blue-600 text-white"
+                      : "bg-transparent text-gray-600 hover:bg-gray-100"
+                  )}
+                  onClick={() => setViewMode("vision")}
+                >
+                  Vision
+                </button>
+              </div>
 
               {showNewProjectButton ? (
                 <Button asChild size="sm">

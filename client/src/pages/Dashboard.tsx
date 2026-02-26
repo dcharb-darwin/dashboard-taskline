@@ -16,6 +16,7 @@ import {
 import { format } from "date-fns";
 import { ViewToggle } from "@/components/ViewToggle";
 import { useViewMode } from "@/hooks/useViewMode";
+import { useViewMode as useAppViewMode } from "@/contexts/ViewModeContext";
 import { useEnums, getBadgeClass } from "@/contexts/EnumContext";
 
 export default function Dashboard() {
@@ -23,6 +24,7 @@ export default function Dashboard() {
   const { data: portfolio } = trpc.dashboard.portfolioSummary.useQuery();
   const { data: projects } = trpc.projects.list.useQuery();
   const [viewMode, setViewMode] = useViewMode("dashboard-projects");
+  const { isMvp } = useAppViewMode();
   const enums = useEnums();
 
   const statusBadge = (status: string) => {
@@ -120,82 +122,84 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card className="bg-white">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="h-4 w-4" />
-                Portfolio Health
-              </CardTitle>
-              <CardDescription>Health status and milestone confidence</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <Link href="/projects?health=onTrack">
-                  <div className="cursor-pointer rounded border bg-emerald-50 p-3 transition-colors hover:bg-emerald-100">
-                    <p className="text-xs text-emerald-700">On Track</p>
-                    <p className="text-xl font-bold text-emerald-800">
-                      {portfolio?.totals.onTrack ?? 0}
-                    </p>
-                  </div>
-                </Link>
-                <Link href="/projects?health=atRisk">
-                  <div className="cursor-pointer rounded border bg-amber-50 p-3 transition-colors hover:bg-amber-100">
-                    <p className="text-xs text-amber-700">At Risk</p>
-                    <p className="text-xl font-bold text-amber-800">
-                      {portfolio?.totals.atRisk ?? 0}
-                    </p>
-                  </div>
-                </Link>
-                <Link href="/projects?health=offTrack">
-                  <div className="cursor-pointer rounded border bg-red-50 p-3 transition-colors hover:bg-red-100">
-                    <p className="text-xs text-red-700">Off Track</p>
-                    <p className="text-xl font-bold text-red-800">
-                      {portfolio?.totals.offTrack ?? 0}
-                    </p>
-                  </div>
-                </Link>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Average completion: {portfolio?.totals.averageCompletionPercent ?? 0}%
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Milestone confidence (High / Medium / Low):{" "}
-                {portfolio?.milestoneConfidence.high ?? 0} /{" "}
-                {portfolio?.milestoneConfidence.medium ?? 0} /{" "}
-                {portfolio?.milestoneConfidence.low ?? 0}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" />
-                Top Risks
-              </CardTitle>
-              <CardDescription>Projects requiring leadership attention</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {!portfolio?.topRisks || portfolio.topRisks.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No at-risk projects right now.</p>
-              ) : (
-                <div className="space-y-2">
-                  {portfolio.topRisks.map((risk) => (
-                    <Link key={risk.projectId} href={`/projects/${risk.projectId}`}>
-                      <div className="cursor-pointer rounded border p-3 transition-colors hover:bg-slate-50">
-                        <p className="font-medium">{risk.projectName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {risk.health} • Overdue: {risk.overdueTasks} • Blocked: {risk.blockedTasks}
-                        </p>
-                      </div>
-                    </Link>
-                  ))}
+        {!isMvp && (
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card className="bg-white">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-4 w-4" />
+                  Portfolio Health
+                </CardTitle>
+                <CardDescription>Health status and milestone confidence</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <Link href="/projects?health=onTrack">
+                    <div className="cursor-pointer rounded border bg-emerald-50 p-3 transition-colors hover:bg-emerald-100">
+                      <p className="text-xs text-emerald-700">On Track</p>
+                      <p className="text-xl font-bold text-emerald-800">
+                        {portfolio?.totals.onTrack ?? 0}
+                      </p>
+                    </div>
+                  </Link>
+                  <Link href="/projects?health=atRisk">
+                    <div className="cursor-pointer rounded border bg-amber-50 p-3 transition-colors hover:bg-amber-100">
+                      <p className="text-xs text-amber-700">At Risk</p>
+                      <p className="text-xl font-bold text-amber-800">
+                        {portfolio?.totals.atRisk ?? 0}
+                      </p>
+                    </div>
+                  </Link>
+                  <Link href="/projects?health=offTrack">
+                    <div className="cursor-pointer rounded border bg-red-50 p-3 transition-colors hover:bg-red-100">
+                      <p className="text-xs text-red-700">Off Track</p>
+                      <p className="text-xl font-bold text-red-800">
+                        {portfolio?.totals.offTrack ?? 0}
+                      </p>
+                    </div>
+                  </Link>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                <p className="text-sm text-muted-foreground">
+                  Average completion: {portfolio?.totals.averageCompletionPercent ?? 0}%
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Milestone confidence (High / Medium / Low):{" "}
+                  {portfolio?.milestoneConfidence.high ?? 0} /{" "}
+                  {portfolio?.milestoneConfidence.medium ?? 0} /{" "}
+                  {portfolio?.milestoneConfidence.low ?? 0}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  Top Risks
+                </CardTitle>
+                <CardDescription>Projects requiring leadership attention</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!portfolio?.topRisks || portfolio.topRisks.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No at-risk projects right now.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {portfolio.topRisks.map((risk) => (
+                      <Link key={risk.projectId} href={`/projects/${risk.projectId}`}>
+                        <div className="cursor-pointer rounded border p-3 transition-colors hover:bg-slate-50">
+                          <p className="font-medium">{risk.projectName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {risk.health} • Overdue: {risk.overdueTasks} • Blocked: {risk.blockedTasks}
+                          </p>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         <div className="grid gap-6 lg:grid-cols-2">
           <Card className="bg-white">

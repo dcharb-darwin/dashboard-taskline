@@ -39,6 +39,7 @@ import { EditProjectDialog } from "@/components/EditProjectDialog";
 import ProjectRisks from "@/components/ProjectRisks";
 import ProjectTagChips from "@/components/ProjectTagChips";
 import UnifiedActivityFeed from "@/components/UnifiedActivityFeed";
+import { useViewMode } from "@/contexts/ViewModeContext";
 import {
   Select,
   SelectContent,
@@ -112,6 +113,7 @@ export default function ProjectDetail() {
   const search = useSearch();
   const projectId = parseInt(params.id || "0", 10);
   const enums = useEnums();
+  const { isMvp } = useViewMode();
 
   const [editingTask, setEditingTask] = useState<any>(null);
   const [showAddTask, setShowAddTask] = useState(false);
@@ -469,20 +471,22 @@ export default function ProjectDetail() {
               </span>
             </div>
             <p className="text-muted-foreground">{project.description || "No description"}</p>
-            <ProjectTagChips projectId={projectId} />
+            {!isMvp && <ProjectTagChips projectId={projectId} />}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setShowEditProject(true)}>
               <Pencil className="mr-2 h-4 w-4" />
               Edit Project
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => exportToExcel.mutate({ projectId })}
-              disabled={exportToExcel.isPending}
-            >
-              {exportToExcel.isPending ? "Exporting..." : "Export to Excel"}
-            </Button>
+            {!isMvp && (
+              <Button
+                variant="outline"
+                onClick={() => exportToExcel.mutate({ projectId })}
+                disabled={exportToExcel.isPending}
+              >
+                {exportToExcel.isPending ? "Exporting..." : "Export to Excel"}
+              </Button>
+            )}
             <Button
               variant="destructive"
               onClick={() => {
@@ -555,7 +559,7 @@ export default function ProjectDetail() {
           </CardContent>
         </Card>
 
-        <ProjectRisks projectId={projectId} />
+        {!isMvp && <ProjectRisks projectId={projectId} />}
 
         <Card className="bg-white">
           <CardHeader>
@@ -899,71 +903,74 @@ export default function ProjectDetail() {
           </CardContent>
         </Card>
 
-        {/* Unified Activity Feed */}
-        <Card className="bg-white">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-4 w-4" />
-              Project Activity
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <UnifiedActivityFeed
-              projectId={projectId}
-              tasks={(tasks || []).map((t) => ({ id: t.id, taskId: t.taskId, taskDescription: t.taskDescription }))}
-            />
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white">
-          <CardHeader>
-            <div className="flex flex-wrap items-center justify-between gap-3">
+        {!isMvp && (
+          <Card className="bg-white">
+            <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <BellRing className="h-4 w-4" />
-                Notifications and Alerts
+                <Activity className="h-4 w-4" />
+                Project Activity
               </CardTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => generateDueAlerts.mutate({ projectId, scopeType: "team", scopeKey: "default" })}
-                disabled={generateDueAlerts.isPending}
-              >
-                {generateDueAlerts.isPending ? "Scanning..." : "Generate Due Alerts"}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <p className="text-sm text-muted-foreground">
-              Notification delivery channels and event preferences are managed in{" "}
-              <Link href="/admin" className="font-medium text-blue-600 underline">Admin Settings → Notifications</Link>.
-            </p>
-            <div>
-              <p className="mb-2 text-sm font-medium">Recent Notification Events</p>
-              {(notificationFeed as NotificationEventView[] | undefined)?.length ? (
-                <div className="space-y-2">
-                  {(notificationFeed as NotificationEventView[]).map((event) => (
-                    <div key={event.id} className="rounded border p-3">
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <p className="text-sm font-medium">{event.title}</p>
-                        <span className="text-xs text-muted-foreground">
-                          {format(new Date(event.createdAt), "MMM d, h:mm a")}
-                        </span>
+            </CardHeader>
+            <CardContent>
+              <UnifiedActivityFeed
+                projectId={projectId}
+                tasks={(tasks || []).map((t) => ({ id: t.id, taskId: t.taskId, taskDescription: t.taskDescription }))}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {!isMvp && (
+          <Card className="bg-white">
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <CardTitle className="flex items-center gap-2">
+                  <BellRing className="h-4 w-4" />
+                  Notifications and Alerts
+                </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => generateDueAlerts.mutate({ projectId, scopeType: "team", scopeKey: "default" })}
+                  disabled={generateDueAlerts.isPending}
+                >
+                  {generateDueAlerts.isPending ? "Scanning..." : "Generate Due Alerts"}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <p className="text-sm text-muted-foreground">
+                Notification delivery channels and event preferences are managed in{" "}
+                <Link href="/admin" className="font-medium text-blue-600 underline">Admin Settings → Notifications</Link>.
+              </p>
+              <div>
+                <p className="mb-2 text-sm font-medium">Recent Notification Events</p>
+                {(notificationFeed as NotificationEventView[] | undefined)?.length ? (
+                  <div className="space-y-2">
+                    {(notificationFeed as NotificationEventView[]).map((event) => (
+                      <div key={event.id} className="rounded border p-3">
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium">{event.title}</p>
+                          <span className="text-xs text-muted-foreground">
+                            {format(new Date(event.createdAt), "MMM d, h:mm a")}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{event.message}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Channels: {event.channels.join(", ") || "None"}
+                        </p>
                       </div>
-                      <p className="text-sm text-muted-foreground">{event.message}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Channels: {event.channels.join(", ") || "None"}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No notification events yet.
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No notification events yet.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Dialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
